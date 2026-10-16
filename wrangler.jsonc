@@ -9,7 +9,7 @@
       "database_name": "pickleball-thuyloi-db",
       // Placeholder for local development. Replace with the id from
       // `wrangler d1 create pickleball-thuyloi-db` before a real deploy.
-      "database_id": "00000000-0000-0000-0000-000000000001",
+      "database_id": "220d2343-29eb-4d8a-acd9-eaaf8740092a",
       "migrations_dir": "migrations"
     }
   ]
