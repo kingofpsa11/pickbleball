@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cf:migrate": "wrangler d1 migrations apply pickleball-thuyloi-db --local",
+    "cf:dev": "wrangler pages dev dist --port 8788",
+    "cf:preview": "npm run build && npm run cf:migrate && npm run cf:dev"
   },
   "dependencies": {
     "react": "^19.2.8",
@@ -23,6 +26,7 @@
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "wrangler": "^4.151.0"
   }
 }

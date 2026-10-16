@@ -1,0 +1,5 @@
+# Không bắt buộc cho bản chạy thử.
+# Mật khẩu mẫu admin được lưu dạng hash trong migrations/0002_seed.sql.
+# Trước khi đưa site ra internet, hãy tạo hash mới bằng:
+#   node scripts/hash-password.mjs "mat-khau-moi"
+# rồi cập nhật dòng admins trong migration hoặc cơ sở dữ liệu.

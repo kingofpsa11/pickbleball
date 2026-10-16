@@ -68,11 +68,13 @@ export function AdminPage() {
           <TournamentDesk tournament={tournament} muc={search.get('muc')} />
         ) : null}
 
+        {store.source === 'remote' ? <AuditList /> : null}
+
         <button
           type="button"
           className="mt-8 text-sm font-semibold text-live"
           onClick={() => {
-            if (window.confirm('Khôi phục toàn bộ dữ liệu mẫu? Các tỷ số vừa nhập trên máy này sẽ mất.')) {
+            if (window.confirm('Khôi phục toàn bộ dữ liệu mẫu? Các giải và tỷ số hiện tại sẽ bị thay bằng dữ liệu mẫu.')) {
               store.resetDemo()
             }
           }}
@@ -365,6 +367,33 @@ function PlayerNamesForm({ tournamentId }: { tournamentId: string }) {
         Tạo giải
       </button>
     </form>
+  )
+}
+
+function AuditList() {
+  const [rows, setRows] = useState<{ id: number; actor: string; summary: string; createdAt: string }[]>([])
+
+  useEffect(() => {
+    void fetch('/api/admin/audit', { cache: 'no-store', credentials: 'include' })
+      .then(async (response) => (response.ok ? response.json() : null))
+      .then((body: { rows?: { id: number; actor: string; summary: string; createdAt: string }[] } | null) => {
+        if (body?.rows) setRows(body.rows)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  if (rows.length === 0) return null
+  return (
+    <details className="mt-6 rounded-3xl bg-card p-4 ring-1 ring-line">
+      <summary className="cursor-pointer text-sm font-extrabold">Lịch sử sửa đổi</summary>
+      <ul className="mt-3 space-y-2 text-sm text-muted">
+        {rows.map((row) => (
+          <li key={row.id}>
+            {row.createdAt} · {row.actor} · {row.summary}
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }
 

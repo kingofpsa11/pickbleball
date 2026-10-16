@@ -23,13 +23,13 @@ export function LoginPage() {
 
   if (organizerSignedIn()) return <Navigate to={destination} replace />
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (signIn(username, password)) {
+    if (await signIn(username, password)) {
       navigate(destination, { replace: true })
       return
     }
-    setError('Sai tài khoản hoặc mật khẩu mẫu.')
+    setError('Sai tài khoản hoặc mật khẩu.')
   }
 
   return (
@@ -38,7 +38,7 @@ export function LoginPage() {
       <main className="mx-auto max-w-md px-4 py-6">
         <h1 className="text-2xl font-extrabold">Cổng ban tổ chức</h1>
         <p className="mt-2 text-sm text-muted">
-          Ban tổ chức đăng nhập để nhập tên thành viên nội bộ và tỷ số. Chưa có máy chủ đăng nhập thật.
+          Ban tổ chức đăng nhập để nhập tên thành viên nội bộ và tỷ số.
         </p>
         <aside className="mt-4 rounded-3xl bg-ball/70 p-4 text-sm">
           <p className="font-extrabold">Tài khoản mẫu</p>

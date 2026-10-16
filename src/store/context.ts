@@ -40,6 +40,7 @@ export type MatchPatch = {
 
 export type StoreApi = {
   data: StoreData
+  source: 'local' | 'remote'
   notice: { id: number; text: string } | null
   updateMatch: (matchId: string, patch: MatchPatch, message?: string) => void
   clearScore: (matchId: string) => void

@@ -11,7 +11,7 @@ import { useTournamentStore } from '../store/context.ts'
 import type { Match } from '../types.ts'
 
 export function HomePage({ scope }: { scope: 'today' | 'history' }) {
-  const { data, deleteTournament, updateMatch } = useTournamentStore()
+  const { data, deleteTournament, source, updateMatch } = useTournamentStore()
   const today = todayInVietnam()
   const [organizer, setOrganizer] = useState(organizerSignedIn)
   const [homeTab, setHomeTab] = useState<'bxh' | 'lich'>('bxh')
@@ -170,7 +170,9 @@ export function HomePage({ scope }: { scope: 'today' | 'history' }) {
             })}
           </div>
         )}
-        <p className="text-center text-xs text-muted">Giai đoạn 1 · dữ liệu mẫu · chưa kết nối cơ sở dữ liệu</p>
+        <p className="text-center text-xs text-muted">
+          {source === 'remote' ? 'Dữ liệu lưu trên Cloudflare D1.' : 'Dữ liệu mẫu đang lưu trên trình duyệt này.'}
+        </p>
       </div>
     </div>
   )
