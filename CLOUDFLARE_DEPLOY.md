@@ -23,57 +23,68 @@ Trong PowerShell, tại thư mục dự án:
 
 ```powershell
 npm install
+npm run cf:migrate
 npm run cf:preview
 ```
 
-Lệnh này build giao diện, tạo database local `pickleball-thuyloi-db` và mở http://127.0.0.1:8788.
+`cf:migrate` chỉ áp schema vào D1 local. `cf:preview` build giao diện và mở http://127.0.0.1:8788.
 
-`npm run dev` vẫn là Vite cũ, dữ liệu nằm trong trình duyệt. Bản Cloudflare phải chạy bằng Wrangler.
+Muốn thêm ba giải mẫu trên máy, khi database local còn trống giải:
 
-Tài khoản mẫu: `admin` / `demo123`. Mật khẩu trong database là hash PBKDF2, không phải chữ thường.
+```powershell
+npm run cf:seed
+```
+
+Lệnh này từ chối nếu local đã có giải, và không nhận `--remote`. Không chạy lệnh này cho production.
+
+`npm run dev` vẫn là Vite, dữ liệu nằm trong trình duyệt, tài khoản mẫu `admin` / `demo123`. Bản Cloudflare không tạo tài khoản đó. Tài khoản local của Wrangler tạo bằng `node scripts/create-admin.mjs`, rồi áp file `.admin-bootstrap.sql` với `--local`.
 
 ## 2. Đưa mã lên Git
 
-Tạo kho trống trên GitHub Free hoặc Git host khác. Không đụng kho của ứng dụng khác.
+Kho đã có: https://github.com/kingofpsa11/pickbleball. Chỉ push nhánh `cloudflare-free` sau khi các sửa migration đã được commit. Không đụng kho của ứng dụng khác.
 
 ```powershell
-git remote add origin <địa-chỉ-kho-riêng>
-git push -u origin cloudflare-free
+git push origin cloudflare-free
 ```
 
-Không push nếu chưa muốn công khai mã nguồn.
-
 ## 3. Đăng nhập Cloudflare
+
+Wrangler trên máy này đã đăng nhập. Nếu hết phiên:
 
 ```powershell
 npx wrangler login
 ```
 
-## 4. Tạo database production
+## 4. Áp schema lên database production
 
-Chỉ chạy khi đã đồng ý:
+Database `pickleball-thuyloi-db` đã được tạo và id đã nằm trong `wrangler.jsonc`. Không tạo database mới và không xóa database local.
 
-```powershell
-npx wrangler d1 create pickleball-thuyloi-db
-```
-
-Lệnh in ra `database_id`. Mở `wrangler.jsonc` và thay `00000000-0000-0000-0000-000000000001` bằng id đó. Không xóa database local.
-
-Áp migration lên database vừa tạo:
+Chỉ chạy khi đã đồng ý, vì database production hiện chưa có bảng:
 
 ```powershell
 npx wrangler d1 migrations apply pickleball-thuyloi-db --remote
 ```
 
-Lệnh này ghi dữ liệu mẫu và tài khoản `admin`. Không chạy lại nếu đã có kết quả thi đấu thật, vì migration đã áp thì Wrangler không chạy lại file cũ, nhưng một file migration mới không được viết đè dữ liệu.
+`0001_init.sql` tạo bảng, khóa ngoại, index và revision `0`. `0002_seed.sql` không nhập giải mẫu và không tạo tài khoản. Không chạy lại migration sau khi đã có kết quả thi đấu thật.
 
-## 5. Đổi mật khẩu trước khi public
+## 5. Tạo tài khoản quản trị đầu tiên
+
+Trong thư mục dự án:
 
 ```powershell
-node scripts/hash-password.mjs "mat-khau-moi"
+node scripts/create-admin.mjs
 ```
 
-Cập nhật salt, hash và số vòng trong bảng `admins` của database production. Không đưa mật khẩu mới vào mã nguồn hay vào frontend.
+Gõ tên đăng nhập và mật khẩu ngay trên màn hình. Mật khẩu không hiện ra, cần ít nhất 12 ký tự, có cả chữ và số. Không truyền mật khẩu qua tham số lệnh. Script ghi `.admin-bootstrap.sql`; Git bỏ qua file này.
+
+Sau khi schema production đã được áp:
+
+```powershell
+npx wrangler d1 execute pickleball-thuyloi-db --remote --file .admin-bootstrap.sql
+Remove-Item .admin-bootstrap.sql
+```
+
+Không có trang web nào để tự tạo tài khoản quản trị. Hash là PBKDF2-SHA256, 10000 vòng, cùng cách đăng nhập của server và nằm trong hạn CPU của gói miễn phí.
 
 ## 6. Tạo project Pages
 
@@ -92,7 +103,7 @@ Tên project gợi ý: `pickleball-thuyloi`. Nếu còn trống, địa chỉ s�
 ## 7. Sau khi deploy
 
 - Mở trang chủ, lịch sử, một trang giải, rồi tải lại từng địa chỉ.
-- Đăng nhập `admin`, sửa một tỷ số, mở tab khách và đợi tối đa 45 giây.
+- Đăng nhập bằng tài khoản vừa tạo, sửa một tỷ số, mở tab khách và đợi tối đa 45 giây.
 - Đăng xuất rồi thử lưu tỷ số: máy chủ phải từ chối.
 - Khách không thấy ô nhập tỷ số.
 
@@ -100,4 +111,4 @@ Tên project gợi ý: `pickleball-thuyloi`. Nếu còn trống, địa chỉ s�
 
 Giải tạo trước đây nằm trong `localStorage` của trình duyệt, không nằm trong Git. Khi ban tổ chức đăng nhập trên đúng trình duyệt đó, site sẽ thêm những giải chưa có trên máy chủ. Giải đã có cùng mã thì giữ bản trên máy chủ. Tỷ số chỉ được lấy từ máy lên nếu trận trên máy chủ chưa có tỷ số.
 
-Không có nút xóa database. Nút “Khôi phục dữ liệu mẫu” vẫn xóa các giải hiện có và thay bằng dữ liệu mẫu, sau khi xác nhận.
+Không có nút xóa database. Trên bản Cloudflare không còn nút “Khôi phục dữ liệu mẫu”, và máy chủ từ chối thao tác đó. Xóa một giải vẫn chỉ xảy ra khi ban tổ chức bấm “Xóa giải” và xác nhận.

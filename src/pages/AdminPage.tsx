@@ -70,17 +70,19 @@ export function AdminPage() {
 
         {store.source === 'remote' ? <AuditList /> : null}
 
-        <button
-          type="button"
-          className="mt-8 text-sm font-semibold text-live"
-          onClick={() => {
-            if (window.confirm('Khôi phục toàn bộ dữ liệu mẫu? Các giải và tỷ số hiện tại sẽ bị thay bằng dữ liệu mẫu.')) {
-              store.resetDemo()
-            }
-          }}
-        >
-          Khôi phục dữ liệu mẫu
-        </button>
+        {store.source === 'local' ? (
+          <button
+            type="button"
+            className="mt-8 text-sm font-semibold text-live"
+            onClick={() => {
+              if (window.confirm('Khôi phục toàn bộ dữ liệu mẫu? Các giải và tỷ số hiện tại sẽ bị thay bằng dữ liệu mẫu.')) {
+                store.resetDemo()
+              }
+            }}
+          >
+            Khôi phục dữ liệu mẫu
+          </button>
+        ) : null}
       </main>
     </div>
   )

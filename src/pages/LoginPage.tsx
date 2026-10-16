@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { SiteHeader, fieldClass } from '../components/ui.tsx'
-import { DEMO_ACCOUNT, organizerSignedIn, signIn } from '../lib/auth.ts'
+import { authUsesServer, DEMO_ACCOUNT, organizerSignedIn, signIn } from '../lib/auth.ts'
 
 function nextPath(value: string | null) {
   if (!value || !value.startsWith('/ban-to-chuc')) return '/ban-to-chuc?viec=lich-su'
@@ -40,22 +40,24 @@ export function LoginPage() {
         <p className="mt-2 text-sm text-muted">
           Ban tổ chức đăng nhập để nhập tên thành viên nội bộ và tỷ số.
         </p>
-        <aside className="mt-4 rounded-3xl bg-ball/70 p-4 text-sm">
-          <p className="font-extrabold">Tài khoản mẫu</p>
-          <p className="mt-1">Tên đăng nhập: {DEMO_ACCOUNT.username}</p>
-          <p>Mật khẩu: {DEMO_ACCOUNT.password}</p>
-          <button
-            type="button"
-            className="mt-3 rounded-full bg-court px-3 py-2 text-sm font-bold text-white"
-            onClick={() => {
-              setUsername(DEMO_ACCOUNT.username)
-              setPassword(DEMO_ACCOUNT.password)
-              setError('')
-            }}
-          >
-            Điền tài khoản mẫu
-          </button>
-        </aside>
+        {authUsesServer() ? null : (
+          <aside className="mt-4 rounded-3xl bg-ball/70 p-4 text-sm">
+            <p className="font-extrabold">Tài khoản mẫu</p>
+            <p className="mt-1">Tên đăng nhập: {DEMO_ACCOUNT.username}</p>
+            <p>Mật khẩu: {DEMO_ACCOUNT.password}</p>
+            <button
+              type="button"
+              className="mt-3 rounded-full bg-court px-3 py-2 text-sm font-bold text-white"
+              onClick={() => {
+                setUsername(DEMO_ACCOUNT.username)
+                setPassword(DEMO_ACCOUNT.password)
+                setError('')
+              }}
+            >
+              Điền tài khoản mẫu
+            </button>
+          </aside>
+        )}
         <form onSubmit={submit} className="mt-4 space-y-3 rounded-3xl bg-card p-4 ring-1 ring-line">
           <label className="block text-sm font-semibold">
             Tên đăng nhập

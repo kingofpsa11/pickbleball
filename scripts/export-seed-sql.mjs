@@ -11,8 +11,8 @@ function sqlNullable(value) {
 }
 
 const lines = [
-  '-- Dữ liệu mẫu ban đầu, cùng nội dung với src/data/seed.ts.',
-  '-- Mật khẩu admin không lưu dạng chữ thường. Hash PBKDF2-SHA256, 10000 vòng.',
+  '-- Dữ liệu giải mẫu cho database local, cùng nội dung với src/data/seed.ts.',
+  '-- Không dùng làm migration production. Không chứa tài khoản quản trị.',
   'PRAGMA foreign_keys = ON;',
   '',
 ]
@@ -91,13 +91,10 @@ for (const match of SEED.matches) {
   })
 }
 
-lines.push(
-  `INSERT INTO admins (id, username, password_salt, password_hash, iterations, created_at) VALUES ('admin-demo', 'admin', 'c642cfbfac884394cacc5b0b72077f2d', '86126b41b52ffe4d8d2cd187130f3a90cc7c1bd01b93407cb5e3cdf6fcf63578', 10000, '2026-10-16T00:00:00+07:00');`,
-)
 lines.push(`UPDATE meta SET value = '1' WHERE key = 'revision';`)
 lines.push('')
 
-writeFileSync(new URL('../migrations/0002_seed.sql', import.meta.url), lines.join('\n'), 'utf8')
+writeFileSync(new URL('../scripts/local-seed.sql', import.meta.url), lines.join('\n'), 'utf8')
 console.log(
   JSON.stringify({
     tournaments: SEED.tournaments.length,

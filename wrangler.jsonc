@@ -7,8 +7,7 @@
     {
       "binding": "DB",
       "database_name": "pickleball-thuyloi-db",
-      // Placeholder for local development. Replace with the id from
-      // `wrangler d1 create pickleball-thuyloi-db` before a real deploy.
+      // Id của database production pickleball-thuyloi-db. Không tạo database khác.
       "database_id": "220d2343-29eb-4d8a-acd9-eaaf8740092a",
       "migrations_dir": "migrations"
     }

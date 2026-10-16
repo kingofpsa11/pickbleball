@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "cf:migrate": "wrangler d1 migrations apply pickleball-thuyloi-db --local",
+    "cf:seed": "node scripts/seed-local.mjs",
     "cf:dev": "wrangler pages dev dist --port 8788",
     "cf:preview": "npm run build && npm run cf:migrate && npm run cf:dev"
   },

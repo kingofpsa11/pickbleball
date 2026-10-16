@@ -11,7 +11,7 @@ npm run dev
 
 Mở địa chỉ mà lệnh in ra (thường là http://localhost:5173). Cách này vẫn lưu dữ liệu trong trình duyệt, chưa qua Cloudflare.
 
-Tài khoản mẫu của ban tổ chức: `admin` / `demo123`.
+Tài khoản mẫu của ban tổ chức khi chạy `npm run dev`: `admin` / `demo123`. Bản Cloudflare không dùng mật khẩu này.
 
 ## Chạy thử như Cloudflare
 

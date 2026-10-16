@@ -20,7 +20,6 @@ const labels: Record<string, string> = {
   updatePlayer: 'Sửa tên vận động viên',
   addMatch: 'Thêm trận',
   deleteTournament: 'Xóa giải',
-  resetDemo: 'Khôi phục dữ liệu mẫu',
 }
 
 export async function onRequestPost(context: { request: Request; env: Env }) {

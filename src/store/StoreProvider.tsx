@@ -596,14 +596,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       flash(`Đã xóa ${tournament.name}`)
     },
     resetDemo() {
+      if (modeRef.current === 'remote') {
+        flash('Không khôi phục dữ liệu mẫu trên máy chủ.')
+        return
+      }
       const fresh = structuredClone(SEED)
       commit(() => fresh, { action: 'resetDemo' })
-      if (modeRef.current !== 'remote') {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh))
-        } catch {
-          // Bỏ qua nếu trình duyệt không cho lưu.
-        }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh))
+      } catch {
+        // Bỏ qua nếu trình duyệt không cho lưu.
       }
       flash('Đã khôi phục dữ liệu mẫu')
     },

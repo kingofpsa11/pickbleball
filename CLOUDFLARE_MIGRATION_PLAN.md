@@ -33,7 +33,7 @@ Phần cần thêm, và đã thêm trên nhánh `cloudflare-free`:
 
 ## Cơ sở dữ liệu
 
-Không có MySQL để chuyển. Schema D1 nằm ở `migrations/0001_init.sql`, dữ liệu mẫu ở `migrations/0002_seed.sql`.
+Không có MySQL để chuyển. Schema D1 nằm ở `migrations/0001_init.sql`. `migrations/0002_seed.sql` không còn nhập giải mẫu hay tài khoản quản trị. Dữ liệu mẫu cho máy local, nếu cần, nằm ở `scripts/local-seed.sql`.
 
 Bảng: `tournaments`, `players`, `teams`, `team_players`, `groups`, `group_teams`, `matches`, `match_sets`, `admins`, `sessions`, `audit_log`, `meta`.
 
@@ -73,8 +73,8 @@ Nếu nhiều người để tab mở cả ngày nhiều hôm, request có thể
 ## Rủi ro
 
 - Chưa deploy. `database_id` trong `wrangler.jsonc` chỉ là id giả cho máy local.
-- Mật khẩu mẫu vẫn là `demo123` để đăng nhập thử. Phải đổi trước khi public. Hash không để plaintext trong database.
-- Nút khôi phục dữ liệu mẫu vẫn xóa dữ liệu hiện có sau khi xác nhận.
+- Bản Cloudflare không tạo tài khoản `admin` / `demo123`. Tài khoản đầu tiên tạo bằng `scripts/create-admin.mjs`, mật khẩu không vào Git.
+- Nút khôi phục dữ liệu mẫu chỉ còn ở chế độ lưu trên trình duyệt. Máy chủ từ chối thao tác này.
 - Hai người sửa cùng lúc: người ghi sau nếu giữ revision cũ sẽ bị từ chối và phải tải lại.
 - Ghi admin thay toàn bộ các dòng vì dữ liệu một giải nội bộ nhỏ. Khách không tải lại toàn bộ ở mỗi lần hỏi revision.
 - Quy tắc `_redirects /* /index.html` bị Wrangler coi là vòng lặp nên không dùng. Các trang SPA có Function riêng trả về `index.html`.

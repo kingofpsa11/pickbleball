@@ -13,6 +13,10 @@ export function watchOrganizerAuth(onChange: () => void) {
   return () => window.removeEventListener(AUTH_EVENT, onChange)
 }
 
+export function authUsesServer() {
+  return usingServer
+}
+
 export function setAuthMode(server: boolean, signedIn: boolean) {
   usingServer = server
   serverSignedIn = signedIn
