@@ -4,12 +4,12 @@ import { SEED } from '../data/seed.ts'
 import { fetchRevision, fetchSession, fetchState } from '../lib/api.ts'
 import { organizerSignedIn, setAuthMode, watchOrganizerAuth } from '../lib/auth.ts'
 import { buildDraw, championPlan, startBlockReason } from '../lib/draw.ts'
-import { buildPairSchedule, buildRandomFixedSchedule, buildRotatingSchedule, rosterBlockReason } from '../lib/schedule.ts'
+import { buildPairSchedule, buildRandomFixedSchedule, buildRotatingSchedule, buildSplitTeamSchedule, rosterBlockReason } from '../lib/schedule.ts'
 import { cleanSets, normalizeData, pairTitle, statusFromSets, teamsAlreadyMeet } from '../lib/results.ts'
 import type { StoreData, TournamentConfig } from '../types.ts'
 import { TournamentContext } from './context.ts'
 import type { MatchPatch, MemberInput, NewMatchInput, NewPairInput, NewTournamentInput, StoreApi } from './context.ts'
-import type { PairingMode, TournamentStatus } from '../types.ts'
+import type { TournamentStatus } from '../types.ts'
 
 const STORAGE_KEY = 'pickleball-results-store-v1'
 const DELETED_KEY = 'pickleball-results-deleted-ids'
@@ -328,14 +328,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       flash('Đã xóa tỷ số')
     },
     updateTournament(id, patch) {
-      commit((current) =>
-        normalizeData({
+      commit((current) => {
+        const previous = current.tournaments.find((tournament) => tournament.id === id)
+        const modeChanged = Boolean(previous && patch.pairingMode && patch.pairingMode !== previous.pairingMode)
+        const hadMatches = current.matches.some((match) => match.tournamentId === id)
+        return normalizeData({
           ...current,
           tournaments: current.tournaments.map((tournament) =>
-            tournament.id === id ? { ...tournament, ...patch } : tournament,
+            tournament.id === id
+              ? { ...tournament, ...patch, ...(modeChanged && hadMatches ? { status: 'upcoming' as const } : {}) }
+              : tournament,
           ),
-        }),
-      { action: 'updateTournament', entityId: id })
+          players: modeChanged
+            ? current.players.map((player) =>
+                player.tournamentId === id
+                  ? { id: player.id, tournamentId: player.tournamentId, name: player.name }
+                  : player,
+              )
+            : current.players,
+          teams: modeChanged ? current.teams.filter((team) => team.tournamentId !== id) : current.teams,
+          groups: modeChanged ? current.groups.filter((group) => group.tournamentId !== id) : current.groups,
+          matches: modeChanged ? current.matches.filter((match) => match.tournamentId !== id) : current.matches,
+        })
+      }, { action: 'updateTournament', entityId: id })
       flash('Đã lưu thông tin giải')
     },
     setTournamentStatus(id, status: TournamentStatus) {
@@ -373,7 +388,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             status: 'upcoming',
             category: input.category.trim() || 'Đôi',
             description: input.description.trim() || 'Dành cho thành viên nội bộ. Ban tổ chức nhập tên từng người.',
-            pairingMode: 'random-fixed' as PairingMode,
+            pairingMode: input.pairingMode,
             config: { ...defaultConfig(), pointsPerSet: input.pointsPerSet, winByTwo: input.winByTwo },
           },
         ],
@@ -612,8 +627,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           seen.add(right)
         }
       }
+      if (input.pairingMode === 'split-random') {
+        if (input.squads.length !== names.length || input.squads.some((squad) => squad !== 0 && squad !== 1 && squad !== 2)) {
+          return 'Cách chia đội không hợp lệ.'
+        }
+      }
       if (!data.tournaments.some((item) => item.id === tournamentId)) return 'Không tìm thấy giải.'
-      const players = names.map((name) => ({ id: crypto.randomUUID(), tournamentId, name }))
+      const players = names.map((name, index) => {
+        const squad = input.pairingMode === 'split-random' ? input.squads[index] : 0
+        return {
+          id: crypto.randomUUID(),
+          tournamentId,
+          name,
+          ...(squad === 1 || squad === 2 ? { squad } : {}),
+        }
+      })
       const teams =
         input.pairingMode === 'fixed'
           ? input.pairs.map(([left, right]) => ({
@@ -663,12 +691,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           return 'Hãy ghép hết các cặp cố định ở tab Thành viên.'
         }
       }
+      const sideA = players.filter((player) => player.squad === 1)
+      const sideB = players.filter((player) => player.squad === 2)
+      if (tournament.pairingMode === 'split-random') {
+        const unassigned = players.filter((player) => player.squad !== 1 && player.squad !== 2)
+        if (unassigned.length === players.length) return 'Chưa có thành viên nào được chia đội. Hãy chia ở tab Thành viên.'
+        if (unassigned.length > 0) return 'Hãy chia hết mọi người vào Đội 1 hoặc Đội 2 ở tab Thành viên.'
+        if (sideA.length !== sideB.length) return 'Hai đội cần bằng số người.'
+        if (sideA.length < 2) return 'Mỗi đội cần ít nhất 2 người.'
+      }
       const draw =
         tournament.pairingMode === 'fixed'
           ? buildPairSchedule({ tournamentId, teams: storedTeams, startDate: tournament.startDate })
           : tournament.pairingMode === 'random-match'
             ? buildRotatingSchedule({ tournamentId, players, startDate: tournament.startDate })
-            : buildRandomFixedSchedule({ tournamentId, players, startDate: tournament.startDate })
+            : tournament.pairingMode === 'split-random'
+              ? buildSplitTeamSchedule({
+                  tournamentId,
+                  players: [...sideA, ...sideB].map((player) => ({
+                    id: player.id,
+                    name: player.name,
+                    squad: player.squad === 1 ? 1 : 2,
+                  })),
+                  startDate: tournament.startDate,
+                })
+              : buildRandomFixedSchedule({ tournamentId, players, startDate: tournament.startDate })
       commit(
         (current) => {
           if (!current.tournaments.some((item) => item.id === tournamentId)) return current

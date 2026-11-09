@@ -1,4 +1,4 @@
-import { normalizeData } from '../../src/lib/results.ts'
+import { normalizeData, pairingModeOf } from '../../src/lib/results.ts'
 import type { Group, Match, Player, RankingKey, SetScore, SlotSource, StoreData, Team, Tournament, TournamentStatus } from '../../src/types.ts'
 import type { D1Database, D1Prepared } from './d1.ts'
 
@@ -23,7 +23,7 @@ type TournamentRow = {
   managed_draw: number
 }
 
-type PlayerRow = { id: string; tournament_id: string; name: string }
+type PlayerRow = { id: string; tournament_id: string; name: string; squad: number | null }
 type TeamRow = { id: string; tournament_id: string; name: string }
 type TeamPlayerRow = { team_id: string; player_id: string; sort_order: number }
 type GroupRow = { id: string; tournament_id: string; name: string }
@@ -62,7 +62,7 @@ export async function readState(db: D1Database): Promise<StoreData> {
          FROM tournaments
          ORDER BY start_date, id`,
       ),
-      db.prepare(`SELECT id, tournament_id, name FROM players ORDER BY id`),
+      db.prepare(`SELECT id, tournament_id, name, squad FROM players ORDER BY id`),
       db.prepare(`SELECT id, tournament_id, name FROM teams ORDER BY id`),
       db.prepare(`SELECT team_id, player_id, sort_order FROM team_players ORDER BY team_id, sort_order`),
       db.prepare(`SELECT id, tournament_id, name FROM groups ORDER BY id`),
@@ -114,12 +114,13 @@ export async function readState(db: D1Database): Promise<StoreData> {
       winByTwo: row.win_by_two !== 0,
       ranking: JSON.parse(row.ranking_json) as RankingKey[],
     },
-    pairingMode: row.pairing_mode === 'fixed' || row.pairing_mode === 'random-match' ? row.pairing_mode : 'random-fixed',
+    pairingMode: pairingModeOf(row.pairing_mode),
   }))
   const players: Player[] = rows(playerRows as { results?: PlayerRow[] }).map((row) => ({
     id: row.id,
     tournamentId: row.tournament_id,
     name: row.name,
+    ...(row.squad === 1 || row.squad === 2 ? { squad: row.squad } : {}),
   }))
   const teams: Team[] = rows(teamRows as { results?: TeamRow[] }).map((row) => ({
     id: row.id,
@@ -203,7 +204,9 @@ export function writeStatements(
   }
   for (const player of data.players) {
     statements.push(
-      db.prepare(`INSERT INTO players (id, tournament_id, name) VALUES (?, ?, ?)`).bind(player.id, player.tournamentId, player.name),
+      db
+        .prepare(`INSERT INTO players (id, tournament_id, name, squad) VALUES (?, ?, ?, ?)`)
+        .bind(player.id, player.tournamentId, player.name, player.squad === 1 || player.squad === 2 ? player.squad : null),
     )
   }
   for (const team of data.teams) {

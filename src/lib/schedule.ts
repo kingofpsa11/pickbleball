@@ -17,6 +17,11 @@ export const pairingChoices: { id: PairingMode; label: string; detail: string }[
     label: 'Cặp random cố định',
     detail: 'Máy ghép ngẫu nhiên một lần. Đôi đó giữ nguyên suốt giải.',
   },
+  {
+    id: 'split-random',
+    label: 'Random từ 2 đội',
+    detail: 'Chia sẵn Đội 1 và Đội 2. Mỗi trận lấy ngẫu nhiên 2 người mỗi đội để đấu.',
+  },
 ]
 
 export function pairingLabel(mode: PairingMode) {
@@ -305,6 +310,144 @@ export function buildRotatingSchedule(options: {
     teams,
     fixtures,
     `Mỗi trận ghép cặp mới. Mỗi người đánh ${each} trận. Người vừa đánh được nghỉ khi còn người khác.`,
+    newId,
+  )
+}
+
+function bestSquadPair(
+  pool: string[],
+  target: number,
+  slot: number,
+  played: Map<string, number>,
+  last: Map<string, number>,
+  streak: Map<string, number>,
+  partners: Map<string, number>,
+  order: Map<string, number>,
+): [string, string] | null {
+  const waiting = pool.filter((id) => (played.get(id) ?? 0) < target)
+  let best: [string, string] | null = null
+  let bestScore = Number.NEGATIVE_INFINITY
+  for (let left = 0; left < waiting.length; left += 1) {
+    for (let right = left + 1; right < waiting.length; right += 1) {
+      const pair: [string, string] = [waiting[left], waiting[right]]
+      let score = 0
+      for (const id of pair) {
+        const rest = slot - (last.get(id) ?? -99)
+        const run = streak.get(id) ?? 0
+        score += Math.min(rest, 6) * 20
+        score -= (played.get(id) ?? 0) * 5
+        score -= (order.get(id) ?? 0) * 0.01
+        if (rest === 1) score -= 80 + run * 120
+      }
+      score -= (partners.get(partnerKey(pair[0], pair[1])) ?? 0) * 30
+      if (score > bestScore) {
+        bestScore = score
+        best = pair
+      }
+    }
+  }
+  return best
+}
+
+function splitFixtures(sideA: string[], sideB: string[], random: () => number) {
+  const target = sideA.length === 2 ? 1 : sideA.length - 1
+  const ids = [...sideA, ...sideB]
+  const order = new Map(shuffle(ids, random).map((id, index) => [id, index]))
+  const played = new Map(ids.map((id) => [id, 0]))
+  const last = new Map(ids.map((id) => [id, -99]))
+  const streak = new Map(ids.map((id) => [id, 0]))
+  const partners = new Map<string, number>()
+  const placed: { a: [string, string]; b: [string, string]; slot: number; court: number }[] = []
+  let slot = 0
+  let guard = 0
+  while ([...played.values()].some((count) => count < target) && guard < sideA.length * target * 4) {
+    guard += 1
+    const firstA = bestSquadPair(sideA, target, slot, played, last, streak, partners, order)
+    const firstB = bestSquadPair(sideB, target, slot, played, last, streak, partners, order)
+    if (!firstA || !firstB) break
+    const chosen: { a: [string, string]; b: [string, string]; court: number }[] = [{ a: firstA, b: firstB, court: 0 }]
+    const secondA = bestSquadPair(
+      sideA.filter((id) => !firstA.includes(id)),
+      target,
+      slot,
+      played,
+      last,
+      streak,
+      partners,
+      order,
+    )
+    const secondB = bestSquadPair(
+      sideB.filter((id) => !firstB.includes(id)),
+      target,
+      slot,
+      played,
+      last,
+      streak,
+      partners,
+      order,
+    )
+    const secondPlayers = [...(secondA ?? []), ...(secondB ?? [])]
+    if (
+      secondA &&
+      secondB &&
+      secondPlayers.every((id) => slot - (last.get(id) ?? -99) !== 1)
+    ) {
+      chosen.push({ a: secondA, b: secondB, court: 1 })
+    }
+    const used = new Set(chosen.flatMap((item) => [...item.a, ...item.b]))
+    for (const item of chosen) {
+      placed.push({ a: item.a, b: item.b, slot, court: item.court })
+      for (const pair of [item.a, item.b]) {
+        const key = partnerKey(pair[0], pair[1])
+        partners.set(key, (partners.get(key) ?? 0) + 1)
+      }
+    }
+    for (const id of used) {
+      const gap = slot - (last.get(id) ?? -99)
+      streak.set(id, gap > 1 ? 1 : (streak.get(id) ?? 0) + 1)
+      last.set(id, slot)
+      played.set(id, (played.get(id) ?? 0) + 1)
+    }
+    for (const id of ids) if (!used.has(id)) streak.set(id, 0)
+    slot += 1
+  }
+  return placed
+}
+
+export function buildSplitTeamSchedule(options: {
+  tournamentId: string
+  players: { id: string; name: string; squad: 1 | 2 }[]
+  startDate: string
+  newId?: () => string
+  random?: () => number
+}): Draw {
+  const newId = options.newId ?? (() => crypto.randomUUID())
+  const random = options.random ?? Math.random
+  const names = new Map(options.players.map((player) => [player.id, player.name]))
+  const sideA = shuffle(
+    options.players.filter((player) => player.squad === 1).map((player) => player.id),
+    random,
+  )
+  const sideB = shuffle(
+    options.players.filter((player) => player.squad === 2).map((player) => player.id),
+    random,
+  )
+  const rounds = splitFixtures(sideA, sideB, random)
+  const teams: Team[] = []
+  const fixtures: { a: string; b: string; slot: number; court: number }[] = []
+  for (const round of rounds) {
+    const home = teamOf(options.tournamentId, round.a, names, newId)
+    const away = teamOf(options.tournamentId, round.b, names, newId)
+    teams.push(home, away)
+    fixtures.push({ a: home.id, b: away.id, slot: round.slot, court: round.court })
+  }
+  const each = sideA.length === 2 ? 1 : sideA.length - 1
+  return pack(
+    options.tournamentId,
+    options.startDate,
+    teams,
+    fixtures,
+    `Mỗi trận lấy 2 người mỗi đội. Mỗi người đánh ${each} trận. Người vừa đánh được nghỉ khi còn người khác.`,
     newId,
   )
 }

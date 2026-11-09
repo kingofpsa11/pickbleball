@@ -32,11 +32,16 @@ export function Standings({
         </div>
       )}
       {tournament.pairingMode === 'random-match' ? (
-        <PlayerTable tournamentId={tournamentId} data={data} embedded={embedded} />
+        <PlayerTable tournamentId={tournamentId} data={data} embedded={embedded} title="Từng người" />
+      ) : tournament.pairingMode === 'split-random' ? (
+        <>
+          <PlayerTable tournamentId={tournamentId} data={data} embedded={embedded} title="Đội 1" squad={1} />
+          <PlayerTable tournamentId={tournamentId} data={data} embedded={embedded} title="Đội 2" squad={2} />
+        </>
       ) : groups.length === 0 ? (
         <p className="text-sm text-muted">Chưa có bảng đấu.</p>
       ) : null}
-      {tournament.pairingMode === 'random-match'
+      {tournament.pairingMode === 'random-match' || tournament.pairingMode === 'split-random'
         ? null
         : groups.map((group) => {
         const rows = standingsForGroup(group.id, data)
@@ -106,12 +111,16 @@ function PlayerTable({
   tournamentId,
   data,
   embedded,
+  title,
+  squad,
 }: {
   tournamentId: string
   data: StoreData
   embedded: boolean
+  title: string
+  squad?: 1 | 2
 }) {
-  const rows = standingsForPlayers(tournamentId, data)
+  const rows = standingsForPlayers(tournamentId, data, squad)
   if (rows.length === 0) return <p className="text-sm text-muted">Chưa có thành viên.</p>
   const pad = embedded ? 'px-1.5 py-2' : 'px-2 py-3'
   const edge = embedded ? 'px-2 py-2' : 'px-3 py-3'
@@ -119,7 +128,7 @@ function PlayerTable({
   const nameCell = embedded ? '' : 'sticky left-10 bg-card'
   return (
     <section>
-      <h3 className={embedded ? 'mb-2 font-extrabold' : 'mb-2 text-lg font-extrabold'}>Từng người</h3>
+      <h3 className={embedded ? 'mb-2 font-extrabold' : 'mb-2 text-lg font-extrabold'}>{title}</h3>
       <div className={embedded ? 'overflow-x-auto rounded-2xl bg-sand' : 'overflow-x-auto rounded-3xl bg-card shadow-sm ring-1 ring-line'}>
         <table className={`w-full border-collapse ${embedded ? 'table-fixed text-xs' : 'min-w-[34rem] text-sm'}`}>
           <thead>

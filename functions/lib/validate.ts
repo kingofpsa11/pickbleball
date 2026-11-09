@@ -49,7 +49,8 @@ export function validateStore(data: StoreData) {
     if (
       tournament.pairingMode !== 'fixed' &&
       tournament.pairingMode !== 'random-match' &&
-      tournament.pairingMode !== 'random-fixed'
+      tournament.pairingMode !== 'random-fixed' &&
+      tournament.pairingMode !== 'split-random'
     ) {
       return 'Thể thức ghép đôi không hợp lệ.'
     }
@@ -76,6 +77,7 @@ export function validateStore(data: StoreData) {
     if (!tournamentIds.has(player.tournamentId) || !text(player.name, 80) || !player.name.trim()) {
       return 'Tên vận động viên không hợp lệ.'
     }
+    if (player.squad !== undefined && player.squad !== 1 && player.squad !== 2) return 'Đội của thành viên không hợp lệ.'
   }
 
   const teamIds = new Set<string>()

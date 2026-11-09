@@ -13,6 +13,7 @@ export type NewTournamentInput = {
   playerNames: string[]
   pointsPerSet: 11 | 15
   winByTwo: boolean
+  pairingMode: PairingMode
 }
 
 export type NewPairInput = {
@@ -26,6 +27,7 @@ export type MemberInput = {
   names: string[]
   pairingMode: PairingMode
   pairs: [number, number][]
+  squads: (0 | 1 | 2)[]
 }
 
 export type NewMatchInput = {

@@ -1,6 +1,6 @@
 export type TournamentStatus = 'upcoming' | 'live' | 'finished'
 
-export type PairingMode = 'fixed' | 'random-match' | 'random-fixed'
+export type PairingMode = 'fixed' | 'random-match' | 'random-fixed' | 'split-random'
 
 export type MatchStatus = 'scheduled' | 'live' | 'finished'
 
@@ -35,6 +35,7 @@ export type Player = {
   id: string
   tournamentId: string
   name: string
+  squad?: 1 | 2
 }
 
 export type Team = {

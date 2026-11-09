@@ -11,7 +11,7 @@ import type {
   TournamentConfig,
 } from '../types.ts'
 
-const pairingModes = new Set<PairingMode>(['fixed', 'random-match', 'random-fixed'])
+const pairingModes = new Set<PairingMode>(['fixed', 'random-match', 'random-fixed', 'split-random'])
 
 export function pairingModeOf(value: unknown): PairingMode {
   return pairingModes.has(value as PairingMode) ? (value as PairingMode) : 'random-fixed'
@@ -133,9 +133,14 @@ export function normalizeData(data: StoreData): StoreData {
       winByTwo: tournament.config?.winByTwo !== false,
     },
   }))
+  const players = data.players.map((player) => {
+    const squad = player.squad === 1 || player.squad === 2 ? player.squad : undefined
+    return squad ? { ...player, squad } : { id: player.id, tournamentId: player.tournamentId, name: player.name }
+  })
   return {
     ...data,
     tournaments,
+    players,
     matches: data.matches.map((match) => {
       const tournament = tournaments.find((item) => item.id === match.tournamentId)
       const forfeit = match.forfeit === 'A' || match.forfeit === 'B' ? match.forfeit : undefined
@@ -279,7 +284,7 @@ export function teamsAlreadyMeet(tournamentId: string, teamAId: string, teamBId:
 export function tournamentChampion(tournamentId: string, data: StoreData): { name: string } | null {
   const tournament = data.tournaments.find((item) => item.id === tournamentId)
   const matches = data.matches.filter((match) => match.tournamentId === tournamentId)
-  if (tournament?.pairingMode === 'random-match') {
+  if (tournament?.pairingMode === 'random-match' || tournament?.pairingMode === 'split-random') {
     if (matches.length === 0 || matches.some((match) => match.status !== 'finished')) return null
     const table = standingsForPlayers(tournamentId, data)
     const top = table[0]
@@ -436,11 +441,13 @@ function playerHeadToHead(playerA: string, playerB: string, matches: Match[], da
   return bWins - aWins
 }
 
-export function standingsForPlayers(tournamentId: string, data: StoreData) {
+export function standingsForPlayers(tournamentId: string, data: StoreData, squad?: 1 | 2) {
   const tournament = data.tournaments.find((item) => item.id === tournamentId)
   if (!tournament) return []
   const rows = new Map(
-    data.players.filter((player) => player.tournamentId === tournamentId).map((player) => [player.id, emptyRow(player.id)]),
+    data.players
+      .filter((player) => player.tournamentId === tournamentId && (squad === undefined || player.squad === squad))
+      .map((player) => [player.id, emptyRow(player.id)]),
   )
   const finished = data.matches.filter((match) => match.tournamentId === tournamentId && match.status === 'finished')
   for (const match of finished) {
@@ -511,12 +518,14 @@ export function formatSummary(config: TournamentConfig) {
 export function rulesLines(config: TournamentConfig, pairingMode: PairingMode = 'random-fixed') {
   const finish = config.winByTwo === false ? `chạm ${config.pointsPerSet} là thắng` : `đến ${config.pointsPerSet}, cần hơn đối thủ 2 điểm`
   const format =
-    pairingMode === 'random-match'
-      ? `Mỗi trận ghép cặp mới. Set ${finish}. Điểm tính cho từng người.`
-      : config.setsToWin <= 1
-        ? `Mỗi đôi chỉ gặp nhau một set. Set ${finish}.`
-        : `Thắng ${config.setsToWin} set thì thắng trận (tối đa ${config.setsToWin * 2 - 1} set). Mỗi set ${finish}.`
-  const subject = pairingMode === 'random-match' ? 'Người' : 'Đôi'
+    pairingMode === 'split-random'
+      ? `Mỗi trận lấy 2 người Đội 1 đấu với 2 người Đội 2. Set ${finish}. Điểm tính cho từng người.`
+      : pairingMode === 'random-match'
+        ? `Mỗi trận ghép cặp mới. Set ${finish}. Điểm tính cho từng người.`
+        : config.setsToWin <= 1
+          ? `Mỗi đôi chỉ gặp nhau một set. Set ${finish}.`
+          : `Thắng ${config.setsToWin} set thì thắng trận (tối đa ${config.setsToWin * 2 - 1} set). Mỗi set ${finish}.`
+  const subject = pairingMode === 'random-match' || pairingMode === 'split-random' ? 'Người' : 'Đôi'
   return [
     `Thắng ${config.pointsForWin} điểm, thua ${config.pointsForLoss} điểm, bỏ cuộc ${config.pointsForForfeit} điểm.`,
     `${subject} có tổng điểm cao hơn thì xếp trên.`,

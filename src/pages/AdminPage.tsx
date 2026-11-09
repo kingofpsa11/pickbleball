@@ -124,22 +124,63 @@ function TournamentDesk({ tournament, muc }: { tournament: Tournament; muc: stri
   )
 }
 
+function PairingModeFields({
+  mode,
+  radioName,
+  onChange,
+}: {
+  mode: PairingMode
+  radioName: string
+  onChange: (mode: PairingMode) => void
+}) {
+  return (
+    <fieldset>
+      <legend className="text-sm font-semibold">Thể thức ghép đôi</legend>
+      <div className="mt-2 grid gap-2">
+        {pairingChoices.map((choice) => (
+          <label
+            key={choice.id}
+            className={`rounded-2xl px-3 py-3 text-sm ring-1 ${mode === choice.id ? 'bg-court text-white ring-court' : 'bg-white ring-line'}`}
+          >
+            <span className="flex items-center gap-2 font-semibold">
+              <input
+                type="radio"
+                name={radioName}
+                className="accent-ball"
+                checked={mode === choice.id}
+                onChange={() => onChange(choice.id)}
+              />
+              {choice.label}
+            </span>
+            <span className={`mt-1 block ${mode === choice.id ? 'text-white/80' : 'text-muted'}`}>{choice.detail}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
 function TournamentInfoForm({ tournament }: { tournament: Tournament }) {
-  const { updateTournament } = useTournamentStore()
+  const store = useTournamentStore()
   const [name, setName] = useState(tournament.name)
   const [category, setCategory] = useState(tournament.category)
   const [startDate, setStartDate] = useState(tournament.startDate)
   const [pointsPerSet, setPointsPerSet] = useState<11 | 15>(tournament.config.pointsPerSet === 15 ? 15 : 11)
   const [winByTwo, setWinByTwo] = useState(tournament.config.winByTwo !== false)
+  const [pairingMode, setPairingMode] = useState<PairingMode>(tournament.pairingMode)
   const choices = categories.includes(category) ? categories : [category, ...categories]
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    updateTournament(tournament.id, {
+    const modeChanged = pairingMode !== tournament.pairingMode
+    const matches = store.data.matches.some((match) => match.tournamentId === tournament.id)
+    if (modeChanged && matches && !window.confirm('Đổi thể thức ghép đôi sẽ xóa lịch và tỷ số hiện có.')) return
+    store.updateTournament(tournament.id, {
       name: name.trim(),
       category,
       startDate,
       endDate: startDate,
+      pairingMode,
       config: { ...tournament.config, pointsPerSet, winByTwo },
     })
   }
@@ -203,6 +244,7 @@ function TournamentInfoForm({ tournament }: { tournament: Tournament }) {
             </label>
           </div>
         </fieldset>
+        <PairingModeFields mode={pairingMode} radioName="ghep-doi-giai" onChange={setPairingMode} />
       </div>
       <button type="submit" className="mt-4 w-full rounded-2xl bg-court py-3 font-bold text-white">
         Lưu thông tin
@@ -218,6 +260,7 @@ function NewTournamentForm({ onCreated, open = false }: { onCreated: (id: string
   const [startDate, setStartDate] = useState('2026-12-01')
   const [pointsPerSet, setPointsPerSet] = useState<11 | 15>(11)
   const [winByTwo, setWinByTwo] = useState(true)
+  const [pairingMode, setPairingMode] = useState<PairingMode>('random-fixed')
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -232,10 +275,12 @@ function NewTournamentForm({ onCreated, open = false }: { onCreated: (id: string
       playerNames: [],
       pointsPerSet,
       winByTwo,
+      pairingMode,
     })
     setName('')
     setPointsPerSet(11)
     setWinByTwo(true)
+    setPairingMode('random-fixed')
     onCreated(id)
   }
 
@@ -290,6 +335,7 @@ function NewTournamentForm({ onCreated, open = false }: { onCreated: (id: string
             </label>
           </div>
         </fieldset>
+        <PairingModeFields mode={pairingMode} radioName="ghep-doi-tao" onChange={setPairingMode} />
         <button type="submit" className="rounded-2xl bg-court py-3 font-bold text-white">
           Tạo giải
         </button>
@@ -359,8 +405,13 @@ function MembersForm({ tournament }: { tournament: Tournament }) {
   const store = useTournamentStore()
   const savedPlayers = store.data.players.filter((player) => player.tournamentId === tournament.id)
   const savedTeams = store.data.teams.filter((team) => team.tournamentId === tournament.id)
-  const [people, setPeople] = useState(() => savedPlayers.map((player) => ({ key: player.id, name: player.name })))
-  const [mode, setMode] = useState<PairingMode>(tournament.pairingMode)
+  const [people, setPeople] = useState<{ key: string; name: string; squad: 0 | 1 | 2 }[]>(() =>
+    savedPlayers.map((player) => ({
+      key: player.id,
+      name: player.name,
+      squad: player.squad === 1 || player.squad === 2 ? player.squad : 0,
+    })),
+  )
   const [pairs, setPairs] = useState<[string, string][]>(() =>
     savedTeams
       .map((team) => team.playerIds)
@@ -383,8 +434,9 @@ function MembersForm({ tournament }: { tournament: Tournament }) {
     if (matches && !window.confirm('Lưu thành viên sẽ xóa lịch và tỷ số hiện có.')) return
     const message = store.saveMembers(tournament.id, {
       names: kept.map((person) => person.name),
-      pairingMode: mode,
-      pairs: mode === 'fixed' ? nextPairs : [],
+      pairingMode: tournament.pairingMode,
+      pairs: tournament.pairingMode === 'fixed' ? nextPairs : [],
+      squads: kept.map((person) => person.squad),
     })
     setError(message ?? '')
   }
@@ -395,10 +447,10 @@ function MembersForm({ tournament }: { tournament: Tournament }) {
       <p className="mt-1 text-sm text-muted">Thêm tên trước. Lịch thi đấu tạo ở tab xếp hạng.</p>
       <div className="mt-3 space-y-2">
         {people.map((person) => (
-          <div key={person.key} className="flex items-center gap-2">
+          <div key={person.key} className="flex flex-wrap items-center gap-2">
             <input
               aria-label="Tên thành viên"
-              className={fieldClass}
+              className={`${fieldClass} min-w-36 flex-1`}
               value={person.name}
               onChange={(event) =>
                 setPeople((current) =>
@@ -407,6 +459,25 @@ function MembersForm({ tournament }: { tournament: Tournament }) {
               }
               required
             />
+            {tournament.pairingMode === 'split-random' ? (
+              <div className="flex shrink-0 gap-1">
+                {([1, 2] as const).map((squad) => (
+                  <button
+                    key={squad}
+                    type="button"
+                    aria-pressed={person.squad === squad}
+                    className={`rounded-xl px-2.5 py-2 text-xs font-bold ring-1 ${person.squad === squad ? 'bg-court text-white ring-court' : 'bg-white text-ink ring-line'}`}
+                    onClick={() =>
+                      setPeople((current) =>
+                        current.map((item) => (item.key === person.key ? { ...item, squad } : item)),
+                      )
+                    }
+                  >
+                    Đội {squad}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <button
               type="button"
               className="shrink-0 text-sm font-semibold text-live"
@@ -423,34 +494,17 @@ function MembersForm({ tournament }: { tournament: Tournament }) {
       <button
         type="button"
         className="mt-3 text-sm font-bold text-court"
-        onClick={() => setPeople((current) => [...current, { key: crypto.randomUUID(), name: '' }])}
+        onClick={() => setPeople((current) => [...current, { key: crypto.randomUUID(), name: '', squad: 0 }])}
       >
         Thêm tên
       </button>
-      <fieldset className="mt-5">
-        <legend className="text-sm font-semibold">Thể thức ghép đôi</legend>
-        <div className="mt-2 grid gap-2">
-          {pairingChoices.map((choice) => (
-            <label
-              key={choice.id}
-              className={`rounded-2xl px-3 py-3 text-sm ring-1 ${mode === choice.id ? 'bg-court text-white ring-court' : 'bg-white ring-line'}`}
-            >
-              <span className="flex items-center gap-2 font-semibold">
-                <input
-                  type="radio"
-                  name="ghep-doi"
-                  className="accent-ball"
-                  checked={mode === choice.id}
-                  onChange={() => setMode(choice.id)}
-                />
-                {choice.label}
-              </span>
-              <span className={`mt-1 block ${mode === choice.id ? 'text-white/80' : 'text-muted'}`}>{choice.detail}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      {mode === 'fixed' ? (
+      {tournament.pairingMode === 'split-random' ? (
+        <p className="mt-3 text-sm text-muted">
+          Đội 1: {people.filter((person) => person.name.trim() && person.squad === 1).length} người · Đội 2:{' '}
+          {people.filter((person) => person.name.trim() && person.squad === 2).length} người. Hai đội cần bằng số người, mỗi đội ít nhất 2 người.
+        </p>
+      ) : null}
+      {tournament.pairingMode === 'fixed' ? (
         <div className="mt-5">
           <h3 className="text-sm font-semibold">Ghép cặp cố định</h3>
           <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
