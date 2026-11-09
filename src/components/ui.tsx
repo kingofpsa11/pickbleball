@@ -181,7 +181,12 @@ export type TabItem = {
 
 export function SectionTabs({ items, current, label }: { items: TabItem[]; current: string; label: string }) {
   return (
-    <div role="tablist" aria-label={label} className="mb-4 grid grid-cols-3 gap-1 rounded-2xl bg-card p-1 ring-1 ring-line">
+    <div
+      role="tablist"
+      aria-label={label}
+      className="mb-4 grid gap-1 rounded-2xl bg-card p-1 ring-1 ring-line"
+      style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
+    >
       {items.map((item) => (
         <Link
           key={item.id}

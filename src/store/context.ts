@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { SetScore, Tournament, TournamentConfig, TournamentStatus } from '../types.ts'
+import type { PairingMode, SetScore, Tournament, TournamentConfig, TournamentStatus } from '../types.ts'
 import type { StoreData } from '../types.ts'
 
 export type NewTournamentInput = {
@@ -11,6 +11,8 @@ export type NewTournamentInput = {
   category: string
   description: string
   playerNames: string[]
+  pointsPerSet: 11 | 15
+  winByTwo: boolean
 }
 
 export type NewPairInput = {
@@ -18,6 +20,12 @@ export type NewPairInput = {
   groupId: string | null
   playerA: string
   playerB: string
+}
+
+export type MemberInput = {
+  names: string[]
+  pairingMode: PairingMode
+  pairs: [number, number][]
 }
 
 export type NewMatchInput = {
@@ -44,7 +52,7 @@ export type StoreApi = {
   notice: { id: number; text: string } | null
   updateMatch: (matchId: string, patch: MatchPatch, message?: string) => void
   clearScore: (matchId: string) => void
-  updateTournament: (id: string, patch: Partial<Omit<Tournament, 'id' | 'config'>>) => void
+  updateTournament: (id: string, patch: Partial<Omit<Tournament, 'id'>>) => void
   setTournamentStatus: (id: string, status: TournamentStatus) => void
   updateConfig: (id: string, patch: Partial<TournamentConfig>) => void
   addTournament: (input: NewTournamentInput) => string
@@ -56,6 +64,8 @@ export type StoreApi = {
   addPair: (input: NewPairInput) => void
   updatePlayer: (playerId: string, name: string) => void
   savePlayersAndRedraw: (tournamentId: string, names: string[]) => string | null
+  saveMembers: (tournamentId: string, input: MemberInput) => string | null
+  createSchedule: (tournamentId: string) => string | null
   deleteTournament: (id: string) => void
   addMatch: (input: NewMatchInput) => boolean
   resetDemo: () => void

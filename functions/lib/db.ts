@@ -17,6 +17,8 @@ type TournamentRow = {
   points_for_loss: number
   points_for_forfeit: number
   points_per_set: number
+  win_by_two: number
+  pairing_mode: string
   ranking_json: string
   managed_draw: number
 }
@@ -56,7 +58,7 @@ export async function readState(db: D1Database): Promise<StoreData> {
       db.prepare(
         `SELECT id, name, venue, city, start_date, end_date, status, category, description,
                 sets_to_win, points_for_win, points_for_loss, points_for_forfeit, points_per_set,
-                ranking_json, managed_draw
+                win_by_two, pairing_mode, ranking_json, managed_draw
          FROM tournaments
          ORDER BY start_date, id`,
       ),
@@ -109,8 +111,10 @@ export async function readState(db: D1Database): Promise<StoreData> {
       pointsForLoss: row.points_for_loss,
       pointsForForfeit: row.points_for_forfeit,
       pointsPerSet: row.points_per_set,
+      winByTwo: row.win_by_two !== 0,
       ranking: JSON.parse(row.ranking_json) as RankingKey[],
     },
+    pairingMode: row.pairing_mode === 'fixed' || row.pairing_mode === 'random-match' ? row.pairing_mode : 'random-fixed',
   }))
   const players: Player[] = rows(playerRows as { results?: PlayerRow[] }).map((row) => ({
     id: row.id,
@@ -172,8 +176,8 @@ export function writeStatements(
           `INSERT INTO tournaments (
              id, name, venue, city, start_date, end_date, status, category, description,
              sets_to_win, points_for_win, points_for_loss, points_for_forfeit, points_per_set,
-             ranking_json, managed_draw
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             win_by_two, pairing_mode, ranking_json, managed_draw
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           tournament.id,
@@ -190,6 +194,8 @@ export function writeStatements(
           tournament.config.pointsForLoss,
           tournament.config.pointsForForfeit,
           tournament.config.pointsPerSet,
+          tournament.config.winByTwo ? 1 : 0,
+          tournament.pairingMode,
           JSON.stringify(tournament.config.ranking),
           tournament.managedDraw ? 1 : 0,
         ),

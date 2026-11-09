@@ -101,8 +101,9 @@ export function HomePage({ scope }: { scope: 'today' | 'history' }) {
                     <LiveScoreDesk
                       matches={current ? [current] : []}
                       pointsPerSet={tournament.config.pointsPerSet}
+                      winByTwo={tournament.config.winByTwo}
                       onSave={(match, score) => {
-                        const finished = setIsComplete(score, tournament.config.pointsPerSet)
+                        const finished = setIsComplete(score, tournament.config.pointsPerSet, tournament.config.winByTwo)
                         updateMatch(
                           match.id,
                           { sets: [score], court: match.court, scheduledAt: match.scheduledAt, forfeit: null },
@@ -201,10 +202,12 @@ function HomeSchedule({ matches, currentId }: { matches: Match[]; currentId: str
 function LiveScoreDesk({
   matches,
   pointsPerSet,
+  winByTwo,
   onSave,
 }: {
   matches: Match[]
   pointsPerSet: number
+  winByTwo: boolean
   onSave: (match: Match, score: { a: number; b: number }) => void
 }) {
   const { data } = useTournamentStore()
@@ -230,6 +233,7 @@ function LiveScoreDesk({
               nameB={nameB}
               groupName={groupName}
               pointsPerSet={pointsPerSet}
+              winByTwo={winByTwo}
               onSave={(score) => onSave(match, score)}
             />
           )
@@ -245,6 +249,7 @@ function LiveScoreForm({
   nameB,
   groupName,
   pointsPerSet,
+  winByTwo,
   onSave,
 }: {
   match: Match
@@ -252,6 +257,7 @@ function LiveScoreForm({
   nameB: string
   groupName?: string
   pointsPerSet: number
+  winByTwo: boolean
   onSave: (score: { a: number; b: number }) => void
 }) {
   const current = match.sets[0] ?? { a: 0, b: 0 }
@@ -263,7 +269,7 @@ function LiveScoreForm({
     onSave({ a: parseScore(scoreA), b: parseScore(scoreB) })
   }
 
-  const ready = setIsComplete({ a: parseScore(scoreA), b: parseScore(scoreB) }, pointsPerSet)
+  const ready = setIsComplete({ a: parseScore(scoreA), b: parseScore(scoreB) }, pointsPerSet, winByTwo)
 
   return (
     <form onSubmit={submit} className="rounded-2xl bg-sand p-3">

@@ -1,6 +1,18 @@
 import { normalizeData } from '../../src/lib/results.ts'
 import type { StoreData } from '../../src/types.ts'
 
+export function omitTournaments(data: StoreData, ids: Set<string>): StoreData {
+  if (ids.size === 0) return data
+  return {
+    ...data,
+    tournaments: data.tournaments.filter((item) => !ids.has(item.id)),
+    players: data.players.filter((item) => !ids.has(item.tournamentId)),
+    teams: data.teams.filter((item) => !ids.has(item.tournamentId)),
+    groups: data.groups.filter((item) => !ids.has(item.tournamentId)),
+    matches: data.matches.filter((item) => !ids.has(item.tournamentId)),
+  }
+}
+
 export function mergeStores(current: StoreData, incoming: StoreData) {
   const tournamentIds = new Set(current.tournaments.map((item) => item.id))
   const playerIds = new Set(current.players.map((item) => item.id))

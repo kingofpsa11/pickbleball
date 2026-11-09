@@ -63,12 +63,14 @@ const hn: Tournament = {
   category: 'Đôi nam',
   description:
     'Dành cho thành viên nội bộ. Ban tổ chức nhập tên từng người. Tám đôi nam, hai bảng. Thắng 2 điểm, thua 1 điểm, bỏ cuộc 0 điểm.',
+  pairingMode: 'random-fixed',
   config: {
     setsToWin: 1,
     pointsForWin: 2,
     pointsForLoss: 1,
     pointsForForfeit: 0,
     pointsPerSet: 11,
+    winByTwo: true,
     ranking: [...standardRanking],
   },
 }
@@ -84,12 +86,14 @@ const dn: Tournament = {
   category: 'Đôi nữ',
   description:
     'Dành cho thành viên nội bộ. Ban tổ chức nhập tên từng người. Bốn đôi nữ đánh vòng tròn. Thắng 2 điểm, thua 1 điểm, bỏ cuộc 0 điểm.',
+  pairingMode: 'random-fixed',
   config: {
     setsToWin: 1,
     pointsForWin: 2,
     pointsForLoss: 1,
     pointsForForfeit: 0,
     pointsPerSet: 11,
+    winByTwo: true,
     ranking: [...standardRanking],
   },
 }
@@ -104,12 +108,14 @@ const sg: Tournament = {
   status: 'upcoming',
   category: 'Đôi nam',
   description: 'Dành cho thành viên nội bộ. Ban tổ chức nhập tên từng người. Bốn đôi nam, lịch đã xếp, chưa thi đấu.',
+  pairingMode: 'random-fixed',
   config: {
     setsToWin: 1,
     pointsForWin: 2,
     pointsForLoss: 1,
     pointsForForfeit: 0,
     pointsPerSet: 11,
+    winByTwo: true,
     ranking: [...standardRanking],
   },
 }

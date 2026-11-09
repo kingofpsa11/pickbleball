@@ -1,7 +1,7 @@
 import { currentAdmin } from '../../lib/auth.ts'
 import { readRevision, readState } from '../../lib/db.ts'
 import { json, readJson, type Env } from '../../lib/d1.ts'
-import { mergeStores } from '../../lib/merge.ts'
+import { mergeStores, omitTournaments } from '../../lib/merge.ts'
 import { saveStore } from '../../lib/save.ts'
 import { validateStore } from '../../lib/validate.ts'
 import { normalizeData } from '../../../src/lib/results.ts'
@@ -23,13 +23,15 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   }
   const error = validateStore(normalized)
   if (error) return json({ error }, 400)
-  const current = await readState(context.env.DB)
-  const merged = mergeStores(current, normalized)
-  if (!merged.changed) {
-    const revision = await readRevision(context.env.DB)
-    return json({ changed: false, revision, data: current })
-  }
   const expected = await readRevision(context.env.DB)
+  const [current, removed] = await Promise.all([
+    readState(context.env.DB),
+    deletedTournamentIds(context.env.DB),
+  ])
+  const merged = mergeStores(current, omitTournaments(normalized, removed))
+  if (!merged.changed) {
+    return json({ changed: false, revision: expected, data: current })
+  }
   const saved = await saveStore(
     context.env.DB,
     expected,
@@ -41,4 +43,11 @@ export async function onRequestPost(context: { request: Request; env: Env }) {
   )
   if (!saved.ok) return json(saved.status === 409 ? { ...saved, changed: false } : { error: saved.error }, saved.status)
   return json({ changed: true, revision: saved.revision, data: saved.data })
+}
+
+async function deletedTournamentIds(db: Env['DB']) {
+  const result = await db
+    .prepare(`SELECT DISTINCT entity_id FROM audit_log WHERE action = 'deleteTournament' AND entity_id != ''`)
+    .all<{ entity_id: string }>()
+  return new Set((result.results ?? []).map((row) => row.entity_id))
 }

@@ -4,13 +4,15 @@ import { SEED } from '../data/seed.ts'
 import { fetchRevision, fetchSession, fetchState } from '../lib/api.ts'
 import { organizerSignedIn, setAuthMode, watchOrganizerAuth } from '../lib/auth.ts'
 import { buildDraw, championPlan, startBlockReason } from '../lib/draw.ts'
+import { buildPairSchedule, buildRandomFixedSchedule, buildRotatingSchedule, rosterBlockReason } from '../lib/schedule.ts'
 import { cleanSets, normalizeData, pairTitle, statusFromSets, teamsAlreadyMeet } from '../lib/results.ts'
 import type { StoreData, TournamentConfig } from '../types.ts'
 import { TournamentContext } from './context.ts'
-import type { MatchPatch, NewMatchInput, NewPairInput, NewTournamentInput, StoreApi } from './context.ts'
-import type { TournamentStatus } from '../types.ts'
+import type { MatchPatch, MemberInput, NewMatchInput, NewPairInput, NewTournamentInput, StoreApi } from './context.ts'
+import type { PairingMode, TournamentStatus } from '../types.ts'
 
 const STORAGE_KEY = 'pickleball-results-store-v1'
+const DELETED_KEY = 'pickleball-results-deleted-ids'
 
 const defaultConfig = (): TournamentConfig => ({
   setsToWin: 1,
@@ -18,6 +20,7 @@ const defaultConfig = (): TournamentConfig => ({
   pointsForLoss: 1,
   pointsForForfeit: 0,
   pointsPerSet: 11,
+  winByTwo: true,
   ranking: ['points', 'matchDiff', 'pointDiff', 'h2h'],
 })
 
@@ -37,6 +40,49 @@ function parseStored(raw: string) {
     return normalizeData(parsed as StoreData)
   } catch {
     return null
+  }
+}
+
+function withoutTournaments(data: StoreData, ids: Set<string>): StoreData {
+  if (ids.size === 0) return data
+  return normalizeData({
+    ...data,
+    tournaments: data.tournaments.filter((item) => !ids.has(item.id)),
+    players: data.players.filter((item) => !ids.has(item.tournamentId)),
+    teams: data.teams.filter((item) => !ids.has(item.tournamentId)),
+    groups: data.groups.filter((item) => !ids.has(item.tournamentId)),
+    matches: data.matches.filter((item) => !ids.has(item.tournamentId)),
+  })
+}
+
+function deletedIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DELETED_KEY) ?? '[]') as unknown
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function rememberDeleted(id: string) {
+  const ids = deletedIds()
+  if (!ids.includes(id)) ids.push(id)
+  try {
+    localStorage.setItem(DELETED_KEY, JSON.stringify(ids.slice(-200)))
+  } catch {
+    // Trình duyệt có thể chặn lưu. Máy chủ vẫn từ chối khôi phục giải đã xóa.
+  }
+}
+
+function dropStoredTournament(id: string) {
+  rememberDeleted(id)
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    const stored = raw ? parseStored(raw) : null
+    if (!stored) return
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(withoutTournaments(stored, new Set([id]))))
+  } catch {
+    // Bản trên máy không xóa được. Máy chủ vẫn giữ quyết định xóa.
   }
 }
 
@@ -154,12 +200,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(STORAGE_KEY)
       const local = raw ? parseStored(raw) : null
       if (!local) return
+      const pruned = withoutTournaments(local, new Set(deletedIds()))
       importedRef.current = true
       const response = await fetch('/api/admin/import', {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ data: local }),
+        body: JSON.stringify({ data: pruned }),
       })
       if (!response.ok || stopped) return
       const body = (await response.json()) as { changed?: boolean; revision?: number }
@@ -185,7 +232,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setNotice({ id: Date.now(), text })
   }
 
-  function commit(recipe: (current: StoreData) => StoreData, audit: { action: string; entityId?: string }) {
+  function commit(
+    recipe: (current: StoreData) => StoreData,
+    audit: { action: string; entityId?: string; success?: string },
+  ) {
     let snapshot: StoreData | null = null
     setData((current) => {
       const next = recipe(current)
@@ -202,7 +252,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       })
   }
 
-  async function push(next: StoreData, audit: { action: string; entityId?: string }) {
+  async function push(next: StoreData, audit: { action: string; entityId?: string; success?: string }) {
     try {
       const response = await fetch('/api/admin/commit', {
         method: 'POST',
@@ -237,6 +287,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       revisionRef.current = payload.revision
       setData((current) => (current === next ? payload.data! : current))
+      if (audit.success) flash(audit.success)
     } catch {
       flash('Không kết nối được máy chủ.')
     }
@@ -277,12 +328,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       flash('Đã xóa tỷ số')
     },
     updateTournament(id, patch) {
-      commit((current) => ({
-        ...current,
-        tournaments: current.tournaments.map((tournament) =>
-          tournament.id === id ? { ...tournament, ...patch } : tournament,
-        ),
-      }), { action: 'updateTournament', entityId: id })
+      commit((current) =>
+        normalizeData({
+          ...current,
+          tournaments: current.tournaments.map((tournament) =>
+            tournament.id === id ? { ...tournament, ...patch } : tournament,
+          ),
+        }),
+      { action: 'updateTournament', entityId: id })
       flash('Đã lưu thông tin giải')
     },
     setTournamentStatus(id, status: TournamentStatus) {
@@ -320,7 +373,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             status: 'upcoming',
             category: input.category.trim() || 'Đôi',
             description: input.description.trim() || 'Dành cho thành viên nội bộ. Ban tổ chức nhập tên từng người.',
-            config: defaultConfig(),
+            pairingMode: 'random-fixed' as PairingMode,
+            config: { ...defaultConfig(), pointsPerSet: input.pointsPerSet, winByTwo: input.winByTwo },
           },
         ],
         players: [
@@ -534,6 +588,105 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       flash(`Đã tạo lại ${cleaned.length / 2} đội và lịch thi đấu.`)
       return null
     },
+    saveMembers(tournamentId, input: MemberInput) {
+      const names = input.names.map((name) => name.trim()).filter(Boolean)
+      if (names.length > 32) return 'Nhiều nhất 32 người.'
+      if (new Set(names.map((name) => name.toLocaleLowerCase('vi'))).size !== names.length) {
+        return 'Mỗi người một tên khác nhau.'
+      }
+      if (input.pairingMode === 'fixed') {
+        const seen = new Set<number>()
+        for (const [left, right] of input.pairs) {
+          if (
+            left === right ||
+            left < 0 ||
+            right < 0 ||
+            left >= names.length ||
+            right >= names.length ||
+            seen.has(left) ||
+            seen.has(right)
+          ) {
+            return 'Mỗi người chỉ ở một cặp.'
+          }
+          seen.add(left)
+          seen.add(right)
+        }
+      }
+      if (!data.tournaments.some((item) => item.id === tournamentId)) return 'Không tìm thấy giải.'
+      const players = names.map((name) => ({ id: crypto.randomUUID(), tournamentId, name }))
+      const teams =
+        input.pairingMode === 'fixed'
+          ? input.pairs.map(([left, right]) => ({
+              id: crypto.randomUUID(),
+              tournamentId,
+              name: `${players[left].name} / ${players[right].name}`,
+              playerIds: [players[left].id, players[right].id],
+            }))
+          : []
+      commit(
+        (current) => {
+          if (!current.tournaments.some((item) => item.id === tournamentId)) return current
+          const hadMatches = current.matches.some((match) => match.tournamentId === tournamentId)
+          return {
+            ...current,
+            tournaments: current.tournaments.map((item) =>
+              item.id === tournamentId
+                ? {
+                    ...item,
+                    pairingMode: input.pairingMode,
+                    managedDraw: true,
+                    status: hadMatches ? 'upcoming' : item.status,
+                  }
+                : item,
+            ),
+            players: [...current.players.filter((player) => player.tournamentId !== tournamentId), ...players],
+            teams: [...current.teams.filter((team) => team.tournamentId !== tournamentId), ...teams],
+            groups: current.groups.filter((group) => group.tournamentId !== tournamentId),
+            matches: current.matches.filter((match) => match.tournamentId !== tournamentId),
+          }
+        },
+        { action: 'saveMembers', entityId: tournamentId },
+      )
+      flash('Đã lưu thành viên.')
+      return null
+    },
+    createSchedule(tournamentId) {
+      const tournament = data.tournaments.find((item) => item.id === tournamentId)
+      if (!tournament) return 'Không tìm thấy giải.'
+      const players = data.players.filter((item) => item.tournamentId === tournamentId)
+      const reason = rosterBlockReason(players.length)
+      if (reason) return reason
+      const storedTeams = data.teams.filter((team) => team.tournamentId === tournamentId && team.playerIds.length === 2)
+      if (tournament.pairingMode === 'fixed') {
+        const covered = storedTeams.flatMap((team) => team.playerIds)
+        if (new Set(covered).size !== players.length || covered.length !== players.length) {
+          return 'Hãy ghép hết các cặp cố định ở tab Thành viên.'
+        }
+      }
+      const draw =
+        tournament.pairingMode === 'fixed'
+          ? buildPairSchedule({ tournamentId, teams: storedTeams, startDate: tournament.startDate })
+          : tournament.pairingMode === 'random-match'
+            ? buildRotatingSchedule({ tournamentId, players, startDate: tournament.startDate })
+            : buildRandomFixedSchedule({ tournamentId, players, startDate: tournament.startDate })
+      commit(
+        (current) => {
+          if (!current.tournaments.some((item) => item.id === tournamentId)) return current
+          return normalizeData({
+            ...current,
+            tournaments: current.tournaments.map((item) =>
+              item.id === tournamentId ? { ...item, status: 'live', managedDraw: true } : item,
+            ),
+            teams: [...current.teams.filter((team) => team.tournamentId !== tournamentId), ...draw.teams],
+            groups: [...current.groups.filter((group) => group.tournamentId !== tournamentId), ...draw.groups],
+            matches: [...current.matches.filter((match) => match.tournamentId !== tournamentId), ...draw.matches],
+          })
+        },
+        { action: 'createSchedule', entityId: tournamentId },
+      )
+      flash(draw.summary)
+      return null
+    },
     updatePlayer(playerId, name) {
       const trimmed = name.trim()
       if (!trimmed) return
@@ -581,19 +734,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     deleteTournament(id) {
       const tournament = data.tournaments.find((item) => item.id === id)
       if (!tournament) return
-      commit(
-        (current) =>
-          normalizeData({
-            ...current,
-            tournaments: current.tournaments.filter((item) => item.id !== id),
-            players: current.players.filter((item) => item.tournamentId !== id),
-            teams: current.teams.filter((item) => item.tournamentId !== id),
-            groups: current.groups.filter((item) => item.tournamentId !== id),
-            matches: current.matches.filter((item) => item.tournamentId !== id),
-          }),
-        { action: 'deleteTournament', entityId: id },
-      )
-      flash(`Đã xóa ${tournament.name}`)
+      dropStoredTournament(id)
+      const message = `Đã xóa ${tournament.name}`
+      commit((current) => withoutTournaments(current, new Set([id])), {
+        action: 'deleteTournament',
+        entityId: id,
+        success: message,
+      })
+      if (modeRef.current !== 'remote') flash(message)
     },
     resetDemo() {
       if (modeRef.current === 'remote') {

@@ -1,6 +1,7 @@
 import type {
   Match,
   MatchStatus,
+  PairingMode,
   Player,
   RankingKey,
   SetScore,
@@ -9,6 +10,12 @@ import type {
   Team,
   TournamentConfig,
 } from '../types.ts'
+
+const pairingModes = new Set<PairingMode>(['fixed', 'random-match', 'random-fixed'])
+
+export function pairingModeOf(value: unknown): PairingMode {
+  return pairingModes.has(value as PairingMode) ? (value as PairingMode) : 'random-fixed'
+}
 
 export const RANKING_LABEL: Record<RankingKey, string> = {
   points: 'tổng điểm',
@@ -90,9 +97,11 @@ export function parseScore(raw: string) {
   return Math.max(0, Math.min(99, Math.trunc(value)))
 }
 
-export function setIsComplete(set: SetScore, pointsPerSet: number) {
+export function setIsComplete(set: SetScore, pointsPerSet: number, winByTwo = true) {
   const high = Math.max(set.a, set.b)
-  return high >= pointsPerSet && Math.abs(set.a - set.b) >= 2
+  const margin = Math.abs(set.a - set.b)
+  if (high < pointsPerSet || margin < 1) return false
+  return winByTwo ? margin >= 2 : true
 }
 
 export function statusFromSets(
@@ -100,13 +109,14 @@ export function statusFromSets(
   setsToWin: number,
   forfeit?: 'A' | 'B',
   pointsPerSet = 11,
+  winByTwo = true,
 ): MatchStatus {
   if (forfeit === 'A' || forfeit === 'B') return 'finished'
   const played = sets.filter((set) => set.a > 0 || set.b > 0)
   if (played.length === 0) return 'scheduled'
   if (setsToWin <= 1) {
     const set = played[0]
-    if (!set || set.a === set.b || !setIsComplete(set, pointsPerSet)) return 'live'
+    if (!set || set.a === set.b || !setIsComplete(set, pointsPerSet, winByTwo)) return 'live'
     return 'finished'
   }
   const wins = countSetWins(played)
@@ -115,19 +125,29 @@ export function statusFromSets(
 }
 
 export function normalizeData(data: StoreData): StoreData {
+  const tournaments = data.tournaments.map((tournament) => ({
+    ...tournament,
+    pairingMode: pairingModeOf(tournament.pairingMode),
+    config: {
+      ...tournament.config,
+      winByTwo: tournament.config?.winByTwo !== false,
+    },
+  }))
   return {
     ...data,
+    tournaments,
     matches: data.matches.map((match) => {
-      const tournament = data.tournaments.find((item) => item.id === match.tournamentId)
+      const tournament = tournaments.find((item) => item.id === match.tournamentId)
       const forfeit = match.forfeit === 'A' || match.forfeit === 'B' ? match.forfeit : undefined
       const setsToWin = tournament?.config.setsToWin ?? 1
       const pointsPerSet = tournament?.config.pointsPerSet ?? 11
+      const winByTwo = tournament?.config.winByTwo !== false
       const sets = forfeit ? [] : cleanSets(match.sets).slice(0, setsToWin <= 1 ? 1 : undefined)
       return {
         ...match,
         sets,
         forfeit,
-        status: statusFromSets(sets, setsToWin, forfeit, pointsPerSet),
+        status: statusFromSets(sets, setsToWin, forfeit, pointsPerSet, winByTwo),
       }
     }),
   }
@@ -256,8 +276,16 @@ export function teamsAlreadyMeet(tournamentId: string, teamAId: string, teamBId:
   })
 }
 
-export function tournamentChampion(tournamentId: string, data: StoreData) {
+export function tournamentChampion(tournamentId: string, data: StoreData): { name: string } | null {
+  const tournament = data.tournaments.find((item) => item.id === tournamentId)
   const matches = data.matches.filter((match) => match.tournamentId === tournamentId)
+  if (tournament?.pairingMode === 'random-match') {
+    if (matches.length === 0 || matches.some((match) => match.status !== 'finished')) return null
+    const table = standingsForPlayers(tournamentId, data)
+    const top = table[0]
+    if (!top || (table[1] && table[1].rank === top.rank)) return null
+    return data.players.find((player) => player.id === top.teamId) ?? null
+  }
   const finalMatch = matches.find((match) => match.roundLabel === 'Chung kết' && match.status === 'finished')
   if (finalMatch) {
     const winnerId = winnerTeamId(finalMatch, data)
@@ -384,14 +412,114 @@ export function standingsForGroup(groupId: string, data: StoreData) {
   }
 }
 
-export function rulesLines(config: TournamentConfig) {
+function playersOnSide(teamId: string | null, data: StoreData) {
+  if (!teamId) return []
+  return data.teams.find((team) => team.id === teamId)?.playerIds ?? []
+}
+
+function playerHeadToHead(playerA: string, playerB: string, matches: Match[], data: StoreData) {
+  let aWins = 0
+  let bWins = 0
+  for (const match of matches) {
+    const sides = getSides(match, data)
+    const sideA = playersOnSide(sides.sideA.teamId, data)
+    const sideB = playersOnSide(sides.sideB.teamId, data)
+    const aHere = sideA.includes(playerA) ? 'A' : sideB.includes(playerA) ? 'B' : ''
+    const bHere = sideA.includes(playerB) ? 'A' : sideB.includes(playerB) ? 'B' : ''
+    if (!aHere || !bHere || aHere === bHere) continue
+    const winner = winnerTeamId(match, data)
+    if (!winner) continue
+    const aWon = (aHere === 'A' && winner === sides.sideA.teamId) || (aHere === 'B' && winner === sides.sideB.teamId)
+    if (aWon) aWins += 1
+    else bWins += 1
+  }
+  return bWins - aWins
+}
+
+export function standingsForPlayers(tournamentId: string, data: StoreData) {
+  const tournament = data.tournaments.find((item) => item.id === tournamentId)
+  if (!tournament) return []
+  const rows = new Map(
+    data.players.filter((player) => player.tournamentId === tournamentId).map((player) => [player.id, emptyRow(player.id)]),
+  )
+  const finished = data.matches.filter((match) => match.tournamentId === tournamentId && match.status === 'finished')
+  for (const match of finished) {
+    const sides = getSides(match, data)
+    if (!sides.sideA.teamId || !sides.sideB.teamId) continue
+    const sideA = playersOnSide(sides.sideA.teamId, data)
+    const sideB = playersOnSide(sides.sideB.teamId, data)
+    const winner = winnerTeamId(match, data)
+    if (!winner) continue
+    const aWon = winner === sides.sideA.teamId
+    const scoreA = match.sets.reduce((sum, set) => sum + set.a, 0)
+    const scoreB = match.sets.reduce((sum, set) => sum + set.b, 0)
+    const give = (ids: string[], won: boolean, forfeited: boolean, scored: number, conceded: number) => {
+      for (const id of ids) {
+        const row = rows.get(id)
+        if (!row) continue
+        row.played += 1
+        row.wins += won ? 1 : 0
+        row.losses += won ? 0 : 1
+        row.forfeits += forfeited ? 1 : 0
+        row.points += forfeited
+          ? tournament.config.pointsForForfeit
+          : won
+            ? tournament.config.pointsForWin
+            : tournament.config.pointsForLoss
+        row.pointsWon += scored
+        row.pointsLost += conceded
+        row.setsWon += won ? 1 : 0
+        row.setsLost += won ? 0 : 1
+      }
+    }
+    if (match.forfeit === 'A' || match.forfeit === 'B') {
+      give(sideA, match.forfeit === 'B', match.forfeit === 'A', 0, 0)
+      give(sideB, match.forfeit === 'A', match.forfeit === 'B', 0, 0)
+      continue
+    }
+    give(sideA, aWon, false, scoreA, scoreB)
+    give(sideB, !aWon, false, scoreB, scoreA)
+  }
+
+  const sorted = [...rows.values()].sort((a, b) => {
+    for (const key of tournament.config.ranking) {
+      const delta = key === 'h2h' ? playerHeadToHead(a.teamId, b.teamId, finished, data) : criterionDelta(key, a, b, finished, data)
+      if (delta !== 0) return delta
+    }
+    return a.teamId.localeCompare(b.teamId)
+  })
+  sorted.forEach((row, index) => {
+    if (index === 0) {
+      row.rank = 1
+      return
+    }
+    const previous = sorted[index - 1]
+    const tied = tournament.config.ranking.every((key) => {
+      const delta = key === 'h2h' ? playerHeadToHead(previous.teamId, row.teamId, finished, data) : criterionDelta(key, previous, row, finished, data)
+      return delta === 0
+    })
+    row.rank = tied ? previous.rank : index + 1
+  })
+  return sorted
+}
+
+export function formatSummary(config: TournamentConfig) {
+  const finish = config.winByTwo === false ? 'chạm điểm tối đa' : 'phải cách 2 điểm'
+  return `${config.pointsPerSet} điểm · ${finish}`
+}
+
+export function rulesLines(config: TournamentConfig, pairingMode: PairingMode = 'random-fixed') {
+  const finish = config.winByTwo === false ? `chạm ${config.pointsPerSet} là thắng` : `đến ${config.pointsPerSet}, cần hơn đối thủ 2 điểm`
   const format =
-    config.setsToWin <= 1
-      ? `Mỗi đội chỉ gặp nhau một set. Set đến ${config.pointsPerSet}, cần hơn đối thủ 2 điểm.`
-      : `Thắng ${config.setsToWin} set thì thắng trận (tối đa ${config.setsToWin * 2 - 1} set). Mỗi set đến ${config.pointsPerSet}, cần hơn đối thủ 2 điểm.`
+    pairingMode === 'random-match'
+      ? `Mỗi trận ghép cặp mới. Set ${finish}. Điểm tính cho từng người.`
+      : config.setsToWin <= 1
+        ? `Mỗi đôi chỉ gặp nhau một set. Set ${finish}.`
+        : `Thắng ${config.setsToWin} set thì thắng trận (tối đa ${config.setsToWin * 2 - 1} set). Mỗi set ${finish}.`
+  const subject = pairingMode === 'random-match' ? 'Người' : 'Đôi'
   return [
     `Thắng ${config.pointsForWin} điểm, thua ${config.pointsForLoss} điểm, bỏ cuộc ${config.pointsForForfeit} điểm.`,
-    'Đôi có tổng điểm cao hơn thì xếp trên.',
+    `${subject} có tổng điểm cao hơn thì xếp trên.`,
     'Nếu bằng điểm, xét hiệu số trận thắng – thua, rồi hiệu số điểm ghi – điểm thua, rồi đối đầu trực tiếp.',
     format,
   ]

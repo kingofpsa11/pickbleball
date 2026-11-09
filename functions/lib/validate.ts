@@ -46,6 +46,13 @@ export function validateStore(data: StoreData) {
       return 'Ngày giải không hợp lệ.'
     }
     if (!tournamentStatus.has(tournament.status)) return 'Trạng thái giải không hợp lệ.'
+    if (
+      tournament.pairingMode !== 'fixed' &&
+      tournament.pairingMode !== 'random-match' &&
+      tournament.pairingMode !== 'random-fixed'
+    ) {
+      return 'Thể thức ghép đôi không hợp lệ.'
+    }
     const config = tournament.config
     if (
       !whole(config.setsToWin, 1, 3) ||
@@ -53,6 +60,7 @@ export function validateStore(data: StoreData) {
       !whole(config.pointsForLoss, 0, 20) ||
       !whole(config.pointsForForfeit, 0, 20) ||
       !whole(config.pointsPerSet, 1, 99) ||
+      typeof config.winByTwo !== 'boolean' ||
       !Array.isArray(config.ranking) ||
       config.ranking.length < 1 ||
       config.ranking.some((key) => !rankingKeys.has(key))

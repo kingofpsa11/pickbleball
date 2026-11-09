@@ -1,6 +1,6 @@
 import type { StoreData } from '../types.ts'
 import { formatDiff } from '../lib/format.ts'
-import { pairNames, rulesLines, standingsForGroup } from '../lib/results.ts'
+import { pairNames, rulesLines, standingsForGroup, standingsForPlayers } from '../lib/results.ts'
 
 export function Standings({
   tournamentId,
@@ -25,14 +25,20 @@ export function Standings({
         <div className="rounded-3xl bg-card p-4 text-sm text-muted ring-1 ring-line">
           <p className="font-semibold text-ink">Cách tính của giải này</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            {rulesLines(tournament.config).map((line) => (
+            {rulesLines(tournament.config, tournament.pairingMode).map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ul>
         </div>
       )}
-      {groups.length === 0 ? <p className="text-sm text-muted">Chưa có bảng đấu.</p> : null}
-      {groups.map((group) => {
+      {tournament.pairingMode === 'random-match' ? (
+        <PlayerTable tournamentId={tournamentId} data={data} embedded={embedded} />
+      ) : groups.length === 0 ? (
+        <p className="text-sm text-muted">Chưa có bảng đấu.</p>
+      ) : null}
+      {tournament.pairingMode === 'random-match'
+        ? null
+        : groups.map((group) => {
         const rows = standingsForGroup(group.id, data)
         return (
           <section key={group.id}>
@@ -93,5 +99,58 @@ export function Standings({
         )
       })}
     </div>
+  )
+}
+
+function PlayerTable({
+  tournamentId,
+  data,
+  embedded,
+}: {
+  tournamentId: string
+  data: StoreData
+  embedded: boolean
+}) {
+  const rows = standingsForPlayers(tournamentId, data)
+  if (rows.length === 0) return <p className="text-sm text-muted">Chưa có thành viên.</p>
+  const pad = embedded ? 'px-1.5 py-2' : 'px-2 py-3'
+  const edge = embedded ? 'px-2 py-2' : 'px-3 py-3'
+  const rankCell = embedded ? '' : 'sticky left-0 bg-card'
+  const nameCell = embedded ? '' : 'sticky left-10 bg-card'
+  return (
+    <section>
+      <h3 className={embedded ? 'mb-2 font-extrabold' : 'mb-2 text-lg font-extrabold'}>Từng người</h3>
+      <div className={embedded ? 'overflow-x-auto rounded-2xl bg-sand' : 'overflow-x-auto rounded-3xl bg-card shadow-sm ring-1 ring-line'}>
+        <table className={`w-full border-collapse ${embedded ? 'table-fixed text-xs' : 'min-w-[34rem] text-sm'}`}>
+          <thead>
+            <tr className="border-b border-line text-left text-xs font-bold text-muted">
+              <th className={`${rankCell} ${edge}`}>#</th>
+              <th className={`${nameCell} ${pad}`}>Thành viên</th>
+              <th className={`${pad} text-right`}>Điểm</th>
+              <th className={`${pad} text-right`}>Hiệu số</th>
+              <th className={`${pad} text-right`}>Thắng</th>
+              <th className={`${pad} text-right`}>Thua</th>
+              <th className={`${edge} text-right`}>Trận</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const name = data.players.find((player) => player.id === row.teamId)?.name ?? 'Thành viên'
+              return (
+                <tr key={row.teamId} className="border-b border-line last:border-0">
+                  <td className={`${rankCell} ${edge} font-extrabold`}>{row.rank}</td>
+                  <td className={`${nameCell} ${pad} font-extrabold`}>{name}</td>
+                  <td className={`${pad} text-right text-base font-extrabold tabular-nums text-court`}>{row.points}</td>
+                  <td className={`${pad} text-right font-semibold tabular-nums`}>{formatDiff(row.pointsWon - row.pointsLost)}</td>
+                  <td className={`${pad} text-right font-semibold tabular-nums`}>{row.wins}</td>
+                  <td className={`${pad} text-right font-semibold tabular-nums`}>{row.losses}</td>
+                  <td className={`${edge} text-right font-semibold tabular-nums`}>{row.played}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }

@@ -19,7 +19,7 @@ const lines = [
 
 for (const tournament of SEED.tournaments) {
   lines.push(
-    `INSERT INTO tournaments (id, name, venue, city, start_date, end_date, status, category, description, sets_to_win, points_for_win, points_for_loss, points_for_forfeit, points_per_set, ranking_json, managed_draw) VALUES (${[
+    `INSERT INTO tournaments (id, name, venue, city, start_date, end_date, status, category, description, sets_to_win, points_for_win, points_for_loss, points_for_forfeit, points_per_set, win_by_two, ranking_json, managed_draw) VALUES (${[
       sqlText(tournament.id),
       sqlText(tournament.name),
       sqlText(tournament.venue),
@@ -34,6 +34,7 @@ for (const tournament of SEED.tournaments) {
       tournament.config.pointsForLoss,
       tournament.config.pointsForForfeit,
       tournament.config.pointsPerSet,
+      tournament.config.winByTwo ? 1 : 0,
       sqlText(JSON.stringify(tournament.config.ranking)),
       tournament.managedDraw ? 1 : 0,
     ].join(', ')});`,

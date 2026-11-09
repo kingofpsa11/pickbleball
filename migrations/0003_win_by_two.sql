@@ -1,0 +1,1 @@
+ALTER TABLE tournaments ADD COLUMN win_by_two INTEGER NOT NULL DEFAULT 1;

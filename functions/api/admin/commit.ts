@@ -17,6 +17,8 @@ const labels: Record<string, string> = {
   addGroup: 'Thêm bảng đấu',
   addPair: 'Thêm đôi',
   savePlayersAndRedraw: 'Tạo lại cặp và lịch',
+  saveMembers: 'Lưu thành viên',
+  createSchedule: 'Tạo lịch thi đấu',
   updatePlayer: 'Sửa tên vận động viên',
   addMatch: 'Thêm trận',
   deleteTournament: 'Xóa giải',

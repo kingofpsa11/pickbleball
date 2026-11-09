@@ -1,5 +1,7 @@
 export type TournamentStatus = 'upcoming' | 'live' | 'finished'
 
+export type PairingMode = 'fixed' | 'random-match' | 'random-fixed'
+
 export type MatchStatus = 'scheduled' | 'live' | 'finished'
 
 export type RankingKey = 'points' | 'matchDiff' | 'pointDiff' | 'h2h' | 'wins' | 'setDiff'
@@ -10,6 +12,7 @@ export type TournamentConfig = {
   pointsForLoss: number
   pointsForForfeit: number
   pointsPerSet: number
+  winByTwo: boolean
   ranking: RankingKey[]
 }
 
@@ -24,6 +27,7 @@ export type Tournament = {
   category: string
   description: string
   config: TournamentConfig
+  pairingMode: PairingMode
   managedDraw?: boolean
 }
 
