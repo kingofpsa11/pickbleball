@@ -519,7 +519,7 @@ export function rulesLines(config: TournamentConfig, pairingMode: PairingMode = 
   const finish = config.winByTwo === false ? `chạm ${config.pointsPerSet} là thắng` : `đến ${config.pointsPerSet}, cần hơn đối thủ 2 điểm`
   const format =
     pairingMode === 'split-random'
-      ? `Mỗi trận lấy 2 người Đội 1 đấu với 2 người Đội 2. Set ${finish}. Điểm tính cho từng người.`
+      ? `Mỗi đôi trên sân gồm một người Đội 1 và một người Đội 2. Set ${finish}. Điểm tính cho từng người.`
       : pairingMode === 'random-match'
         ? `Mỗi trận ghép cặp mới. Set ${finish}. Điểm tính cho từng người.`
         : config.setsToWin <= 1

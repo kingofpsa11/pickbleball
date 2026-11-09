@@ -20,7 +20,7 @@ export const pairingChoices: { id: PairingMode; label: string; detail: string }[
   {
     id: 'split-random',
     label: 'Random từ 2 đội',
-    detail: 'Chia sẵn Đội 1 và Đội 2. Mỗi trận lấy ngẫu nhiên 2 người mỗi đội để đấu.',
+    detail: 'Chia sẵn Đội 1 và Đội 2. Mỗi đôi trên sân gồm một người Đội 1 và một người Đội 2.',
   },
 ]
 
@@ -314,35 +314,76 @@ export function buildRotatingSchedule(options: {
   )
 }
 
-function bestSquadPair(
-  pool: string[],
+function pairsOf(ids: string[]) {
+  const pairs: [string, string][] = []
+  for (let left = 0; left < ids.length; left += 1) {
+    for (let right = left + 1; right < ids.length; right += 1) pairs.push([ids[left], ids[right]])
+  }
+  return pairs
+}
+
+function remainingUnder(pool: string[], duo: [string, string], played: Map<string, number>, target: number) {
+  return pool.filter((id) => {
+    const next = (played.get(id) ?? 0) + (id === duo[0] || id === duo[1] ? 1 : 0)
+    return next < target
+  }).length
+}
+
+function mixedPlayerScore(
+  id: string,
+  slot: number,
+  played: Map<string, number>,
+  last: Map<string, number>,
+  streak: Map<string, number>,
+  order: Map<string, number>,
+) {
+  const rest = slot - (last.get(id) ?? -99)
+  const run = streak.get(id) ?? 0
+  let score = Math.min(rest, 6) * 20 - (played.get(id) ?? 0) * 5 - (order.get(id) ?? 0) * 0.01
+  if (rest === 1) score -= 80 + run * 120
+  return score
+}
+
+function bestMixedMatch(
+  squadA: string[],
+  squadB: string[],
   target: number,
   slot: number,
   played: Map<string, number>,
   last: Map<string, number>,
   streak: Map<string, number>,
   partners: Map<string, number>,
+  opponents: Map<string, number>,
   order: Map<string, number>,
-): [string, string] | null {
-  const waiting = pool.filter((id) => (played.get(id) ?? 0) < target)
-  let best: [string, string] | null = null
+  blocked: Set<string>,
+  requireRest: boolean,
+) {
+  const eligible = (pool: string[]) =>
+    pool.filter((id) => {
+      if (blocked.has(id) || (played.get(id) ?? 0) >= target) return false
+      return !requireRest || slot - (last.get(id) ?? -99) !== 1
+    })
+  let best: { a: [string, string]; b: [string, string] } | null = null
   let bestScore = Number.NEGATIVE_INFINITY
-  for (let left = 0; left < waiting.length; left += 1) {
-    for (let right = left + 1; right < waiting.length; right += 1) {
-      const pair: [string, string] = [waiting[left], waiting[right]]
-      let score = 0
-      for (const id of pair) {
-        const rest = slot - (last.get(id) ?? -99)
-        const run = streak.get(id) ?? 0
-        score += Math.min(rest, 6) * 20
-        score -= (played.get(id) ?? 0) * 5
-        score -= (order.get(id) ?? 0) * 0.01
-        if (rest === 1) score -= 80 + run * 120
-      }
-      score -= (partners.get(partnerKey(pair[0], pair[1])) ?? 0) * 30
-      if (score > bestScore) {
-        bestScore = score
-        best = pair
+  for (const duoA of pairsOf(eligible(squadA))) {
+    if (remainingUnder(squadA, duoA, played, target) === 1) continue
+    for (const duoB of pairsOf(eligible(squadB))) {
+      if (remainingUnder(squadB, duoB, played, target) === 1) continue
+      const options: [[string, string], [string, string]][] = [
+        [[duoA[0], duoB[0]], [duoA[1], duoB[1]]],
+        [[duoA[0], duoB[1]], [duoA[1], duoB[0]]],
+      ]
+      for (const [sideA, sideB] of options) {
+        let score = 0
+        for (const id of [...sideA, ...sideB]) score += mixedPlayerScore(id, slot, played, last, streak, order)
+        score -= (partners.get(partnerKey(sideA[0], sideA[1])) ?? 0) * 30
+        score -= (partners.get(partnerKey(sideB[0], sideB[1])) ?? 0) * 30
+        score -= (opponents.get(partnerKey(sideA[0], sideB[0])) ?? 0) * 20
+        score -= (opponents.get(partnerKey(sideA[1], sideB[1])) ?? 0) * 20
+        if (score > bestScore) {
+          bestScore = score
+          best = { a: sideA, b: sideB }
+        }
       }
     }
   }
@@ -357,50 +398,26 @@ function splitFixtures(sideA: string[], sideB: string[], random: () => number) {
   const last = new Map(ids.map((id) => [id, -99]))
   const streak = new Map(ids.map((id) => [id, 0]))
   const partners = new Map<string, number>()
+  const opponents = new Map<string, number>()
   const placed: { a: [string, string]; b: [string, string]; slot: number; court: number }[] = []
   let slot = 0
   let guard = 0
   while ([...played.values()].some((count) => count < target) && guard < sideA.length * target * 4) {
     guard += 1
-    const firstA = bestSquadPair(sideA, target, slot, played, last, streak, partners, order)
-    const firstB = bestSquadPair(sideB, target, slot, played, last, streak, partners, order)
-    if (!firstA || !firstB) break
-    const chosen: { a: [string, string]; b: [string, string]; court: number }[] = [{ a: firstA, b: firstB, court: 0 }]
-    const secondA = bestSquadPair(
-      sideA.filter((id) => !firstA.includes(id)),
-      target,
-      slot,
-      played,
-      last,
-      streak,
-      partners,
-      order,
-    )
-    const secondB = bestSquadPair(
-      sideB.filter((id) => !firstB.includes(id)),
-      target,
-      slot,
-      played,
-      last,
-      streak,
-      partners,
-      order,
-    )
-    const secondPlayers = [...(secondA ?? []), ...(secondB ?? [])]
-    if (
-      secondA &&
-      secondB &&
-      secondPlayers.every((id) => slot - (last.get(id) ?? -99) !== 1)
-    ) {
-      chosen.push({ a: secondA, b: secondB, court: 1 })
-    }
+    const first = bestMixedMatch(sideA, sideB, target, slot, played, last, streak, partners, opponents, order, new Set(), false)
+    if (!first) break
+    const chosen = [{ ...first, court: 0 }]
+    const blocked = new Set<string>([...first.a, ...first.b])
+    const pending = new Map(played)
+    for (const id of blocked) pending.set(id, (pending.get(id) ?? 0) + 1)
+    const second = bestMixedMatch(sideA, sideB, target, slot, pending, last, streak, partners, opponents, order, blocked, true)
+    if (second) chosen.push({ ...second, court: 1 })
     const used = new Set(chosen.flatMap((item) => [...item.a, ...item.b]))
     for (const item of chosen) {
       placed.push({ a: item.a, b: item.b, slot, court: item.court })
-      for (const pair of [item.a, item.b]) {
-        const key = partnerKey(pair[0], pair[1])
-        partners.set(key, (partners.get(key) ?? 0) + 1)
-      }
+      for (const pair of [item.a, item.b]) partners.set(partnerKey(pair[0], pair[1]), (partners.get(partnerKey(pair[0], pair[1])) ?? 0) + 1)
+      opponents.set(partnerKey(item.a[0], item.b[0]), (opponents.get(partnerKey(item.a[0], item.b[0])) ?? 0) + 1)
+      opponents.set(partnerKey(item.a[1], item.b[1]), (opponents.get(partnerKey(item.a[1], item.b[1])) ?? 0) + 1)
     }
     for (const id of used) {
       const gap = slot - (last.get(id) ?? -99)
@@ -447,7 +464,7 @@ export function buildSplitTeamSchedule(options: {
     options.startDate,
     teams,
     fixtures,
-    `Mỗi trận lấy 2 người mỗi đội. Mỗi người đánh ${each} trận. Người vừa đánh được nghỉ khi còn người khác.`,
+    `Mỗi đôi trên sân gồm một người mỗi đội. Mỗi người đánh ${each} trận. Người vừa đánh được nghỉ khi còn người khác.`,
     newId,
   )
 }

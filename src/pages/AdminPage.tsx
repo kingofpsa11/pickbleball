@@ -501,7 +501,7 @@ function MembersForm({ tournament }: { tournament: Tournament }) {
       {tournament.pairingMode === 'split-random' ? (
         <p className="mt-3 text-sm text-muted">
           Đội 1: {people.filter((person) => person.name.trim() && person.squad === 1).length} người · Đội 2:{' '}
-          {people.filter((person) => person.name.trim() && person.squad === 2).length} người. Hai đội cần bằng số người, mỗi đội ít nhất 2 người.
+          {people.filter((person) => person.name.trim() && person.squad === 2).length} người. Mỗi đôi trên sân gồm một người mỗi đội. Hai đội cần bằng số người, mỗi đội ít nhất 2 người.
         </p>
       ) : null}
       {tournament.pairingMode === 'fixed' ? (
